@@ -1,39 +1,83 @@
-version: '3.1'
 services:
-    postgres:
-        build: phpdocker/pg
-        working_dir: /application
-        volumes:
-            - './db:/var/lib/postgresql/data'
-            - './application:/application'
-        environment:
-            - POSTGRES_USER=flibusta
-            - POSTGRES_PASSWORD=flibusta
-            - POSTGRES_DB=flibusta
-        ports:
-            - '27101:5432'
+  postgres:
+    build: phpdocker/pg
+    working_dir: /application
+    volumes:
+      - './db:/var/lib/postgresql/data'
+      - './backend:/application'
+    environment:
+      - POSTGRES_USER=flibusta
+      - POSTGRES_PASSWORD=flibusta
+      - POSTGRES_DB=flibusta
+    ports:
+      - '27101:5432'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flibusta"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-    webserver:
-        image: 'nginx:alpine'
-        working_dir: /application
-        volumes:
-            - './application:/application'
-            - './cache:/application/cache'
-            - './Flibusta.Net:/application/flibusta'
-            - './FlibustaSQL/lib.a.attached.zip:/application/cache/lib.a.attached.zip'
-            - './FlibustaSQL/lib.b.attached.zip:/application/cache/lib.b.attached.zip'
-            - './phpdocker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf'
-        ports:
-            - '27100:80'
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    working_dir: /app
+    volumes:
+      - './backend:/app'
+      - './cache:/app/cache'
+      - '/Volumes/NAS/Books/flibusta/Flibusta.Net:/app/flibusta'
+      - './FlibustaSQL:/app/sql'
+      - './FlibustaSQL/lib.a.attached.zip:/app/cache/lib.a.attached.zip'
+      - './FlibustaSQL/lib.b.attached.zip:/app/cache/lib.b.attached.zip'
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=flibusta
+      - DB_USER=flibusta
+      - DB_PASSWORD=flibusta
+      - DB_SSL=false
+      - SESSION_SECRET=your-super-secret-session-key-change-this
+      - JWT_SECRET=your-super-secret-jwt-key-change-this
+      - JWT_EXPIRES_IN=7d
+      - BOOKS_PATH=/app/flibusta
+      - CACHE_PATH=/app/cache
+      - AUTHORS_CACHE_PATH=/app/cache/authors
+      - COVERS_CACHE_PATH=/app/cache/covers
+      - RECORDS_PER_PAGE=10
+      - BOOKS_PER_PAGE=10
+      - AUTHORS_PER_PAGE=50
+      - SERIES_PER_PAGE=50
+      - OPDS_FEED_COUNT=100
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX_REQUESTS=100
+      - LOG_LEVEL=info
+      - SUPERADMIN_USERNAME=max
+      - SUPERADMIN_PASSWORD=hitthat
+      - SUPERADMIN_EMAIL=me@sadontsev.com
+      - BCRYPT_ROUNDS=12
+    ports:
+      - '27100:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-    php-fpm:
-        build: phpdocker/php-fpm
-        working_dir: /application
-        volumes:
-            - './application:/application'
-            - './cache:/application/cache'
-            - './FlibustaSQL/lib.a.attached.zip:/application/cache/lib.a.attached.zip'
-            - './FlibustaSQL/lib.b.attached.zip:/application/cache/lib.b.attached.zip'
-            - './Flibusta.Net:/application/flibusta'
-            - './FlibustaSQL:/application/sql'
-            - './phpdocker/php-fpm/php-ini-overrides.ini:/etc/php/7.4/fpm/conf.d/99-overrides.ini'
+  nginx:
+    image: 'nginx:alpine'
+    working_dir: /application
+    volumes:
+      - './backend/public:/usr/share/nginx/html'
+      - './nginx.conf:/etc/nginx/nginx.conf:ro'
+    ports:
+      - '27102:80'
+    depends_on:
+      - backend
+    restart: unless-stopped

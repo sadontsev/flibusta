@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Вход в систему - Флибуста</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/css/style.css?v=4" rel="stylesheet">
+    
+    <link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
+</head>
+<body class="bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 min-h-screen flex items-center justify-center">
+    <div class="w-full max-w-md">
+        <!-- Logo and Title -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 bg-white/10 rounded-full mb-4">
+                <i class="fas fa-book-open text-3xl text-white"></i>
+            </div>
+            <h1 class="text-3xl font-bold text-white mb-2">Флибуста</h1>
+            <p class="text-gray-300">Домашняя библиотека</p>
+        </div>
+
+        <!-- Login Card -->
+        <div class="bg-white/10 backdrop-blur-lg rounded-2xl shadow-2xl p-8 border border-white/20">
+            <div class="text-center mb-6">
+                <h2 class="text-2xl font-bold text-white mb-2">Вход в систему</h2>
+                <p class="text-gray-300">Введите ваши учетные данные</p>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" class="space-y-6">
+                <!-- Username Field -->
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-300 mb-2">
+                        <i class="fas fa-user mr-2"></i>Имя пользователя
+                    </label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        required
+                        class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200"
+                        placeholder="Введите имя пользователя"
+                        autocomplete="username"
+                    >
+                </div>
+
+                <!-- Password Field -->
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-300 mb-2">
+                        <i class="fas fa-lock mr-2"></i>Пароль
+                    </label>
+                    <div class="relative">
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password" 
+                            required
+                            class="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all duration-200 pr-12"
+                            placeholder="Введите пароль"
+                            autocomplete="current-password"
+                        >
+                        <button 
+                            type="button" 
+                            id="togglePassword"
+                            class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                        >
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Error Message -->
+                <div id="errorMessage" class="hidden bg-red-500/20 border border-red-500/30 text-red-200 px-4 py-3 rounded-lg">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>
+                    <span id="errorText"></span>
+                </div>
+
+                <!-- Success Message -->
+                <div id="successMessage" class="hidden bg-green-500/20 border border-green-500/30 text-green-200 px-4 py-3 rounded-lg">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    <span id="successText"></span>
+                </div>
+
+                <!-- Login Button -->
+                <button 
+                    type="submit" 
+                    id="loginButton"
+                    class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-transparent"
+                >
+                    <i class="fas fa-sign-in-alt mr-2"></i>
+                    <span id="loginButtonText">Войти в систему</span>
+                </button>
+            </form>
+
+
+
+            <!-- Back to Home -->
+            <div class="mt-6 text-center">
+                <a href="/" class="text-gray-300 hover:text-white transition-colors text-sm">
+                    <i class="fas fa-arrow-left mr-1"></i>
+                    Вернуться на главную
+                </a>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center mt-8">
+            <p class="text-gray-400 text-sm">
+                © 2025 Флибуста. Домашняя библиотека
+            </p>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50">
+        <div class="bg-white/10 backdrop-blur-lg rounded-lg p-6 border border-white/20">
+            <div class="flex items-center space-x-3">
+                <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+                <span class="text-white">Вход в систему...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class LoginPage {
+            constructor() {
+                this.form = document.getElementById('loginForm');
+                this.usernameInput = document.getElementById('username');
+                this.passwordInput = document.getElementById('password');
+                this.togglePasswordBtn = document.getElementById('togglePassword');
+                this.loginButton = document.getElementById('loginButton');
+                this.loginButtonText = document.getElementById('loginButtonText');
+                this.errorMessage = document.getElementById('errorMessage');
+                this.errorText = document.getElementById('errorText');
+                this.successMessage = document.getElementById('successMessage');
+                this.successText = document.getElementById('successText');
+                this.loadingOverlay = document.getElementById('loadingOverlay');
+
+                this.bindEvents();
+                this.checkForRedirect();
+            }
+
+            bindEvents() {
+                this.form.addEventListener('submit', (e) => this.handleLogin(e));
+                this.togglePasswordBtn.addEventListener('click', () => this.togglePassword());
+                
+                // Auto-focus username field
+                this.usernameInput.focus();
+            }
+
+            checkForRedirect() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const redirect = urlParams.get('redirect');
+                if (redirect) {
+                    this.showMessage('info', `Для доступа к запрашиваемой странице необходимо войти в систему.`);
+                }
+            }
+
+            async handleLogin(e) {
+                e.preventDefault();
+                
+                const username = this.usernameInput.value.trim();
+                const password = this.passwordInput.value;
+
+                if (!username || !password) {
+                    this.showError('Пожалуйста, заполните все поля');
+                    return;
+                }
+
+                this.setLoading(true);
+
+                try {
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({ username, password })
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        this.showSuccess('Вход выполнен успешно! Перенаправление...');
+                        
+                        // Get redirect URL from query parameters
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const redirect = urlParams.get('redirect') || '/';
+                        
+                        // Redirect after a short delay
+                        setTimeout(() => {
+                            window.location.href = redirect;
+                        }, 1000);
+                        
+                    } else {
+                        this.showError(result.error || 'Ошибка входа в систему');
+                    }
+                } catch (error) {
+                    console.error('Login error:', error);
+                    this.showError('Ошибка соединения с сервером');
+                } finally {
+                    this.setLoading(false);
+                }
+            }
+
+            togglePassword() {
+                const type = this.passwordInput.type === 'password' ? 'text' : 'password';
+                this.passwordInput.type = type;
+                
+                const icon = this.togglePasswordBtn.querySelector('i');
+                icon.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+            }
+
+            showError(message) {
+                this.errorText.textContent = message;
+                this.errorMessage.classList.remove('hidden');
+                this.successMessage.classList.add('hidden');
+            }
+
+            showSuccess(message) {
+                this.successText.textContent = message;
+                this.successMessage.classList.remove('hidden');
+                this.errorMessage.classList.add('hidden');
+            }
+
+            showMessage(type, message) {
+                if (type === 'error') {
+                    this.showError(message);
+                } else if (type === 'success') {
+                    this.showSuccess(message);
+                }
+            }
+
+            setLoading(loading) {
+                if (loading) {
+                    this.loginButton.disabled = true;
+                    this.loginButtonText.textContent = 'Вход...';
+                    this.loadingOverlay.classList.remove('hidden');
+                    this.loadingOverlay.classList.add('flex');
+                } else {
+                    this.loginButton.disabled = false;
+                    this.loginButtonText.textContent = 'Войти в систему';
+                    this.loadingOverlay.classList.add('hidden');
+                    this.loadingOverlay.classList.remove('flex');
+                }
+            }
+        }
+
+        // Initialize login page when DOM is loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            new LoginPage();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,592 @@
+/* Custom styles for Flibusta frontend */
+
+body {
+    background-color: #111827 !important;
+    color: #ffffff !important;
+}
+
+#contentArea {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    min-height: 200px;
+}
+
+/* Line clamp utility for text truncation */
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #374151;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #6B7280;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #9CA3AF;
+}
+
+/* Loading animation */
+.loading-spinner {
+    border: 4px solid #374151;
+    border-top: 4px solid #3B82F6;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Hover effects */
+.hover-lift {
+    transition: transform 0.2s ease-in-out;
+}
+
+.hover-lift:hover {
+    transform: translateY(-4px);
+}
+
+/* Book cover placeholder */
+.book-cover-placeholder {
+    background: linear-gradient(135deg, #374151 0%, #4B5563 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9CA3AF;
+    font-size: 0.875rem;
+    text-align: center;
+    padding: 1rem;
+}
+
+.navbar-brand {
+    font-weight: bold;
+    font-size: 1.5rem;
+}
+
+.card {
+    background-color: #2d2d2d !important;
+    border: 1px solid #404040 !important;
+    transition: transform 0.2s ease-in-out;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.card-header {
+    background-color: #404040;
+    border-bottom: 1px solid #505050;
+}
+
+.book-card {
+    height: 100%;
+    cursor: pointer;
+}
+
+.book-card .card-body {
+    display: flex;
+    flex-direction: column;
+}
+
+.book-card .card-title {
+    font-size: 1rem;
+    font-weight: bold;
+    margin-bottom: 0.5rem;
+    line-height: 1.3;
+}
+
+.book-card .card-text {
+    font-size: 0.9rem;
+    color: #cccccc;
+    flex-grow: 1;
+}
+
+.author-badge {
+    background-color: #6c757d;
+    color: white;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    margin: 0.1rem;
+    display: inline-block;
+}
+
+.genre-badge {
+    background-color: #17a2b8;
+    color: white;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    margin: 0.1rem;
+    display: inline-block;
+}
+
+.book-cover {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+    border-radius: 0.25rem;
+}
+
+.author-avatar {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 50%;
+    border: 2px solid #6c757d;
+}
+
+.pagination .page-link {
+    background-color: #404040;
+    border-color: #505050;
+    color: #ffffff;
+}
+
+.pagination .page-link:hover {
+    background-color: #505050;
+    border-color: #606060;
+    color: #ffffff;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.form-control {
+    background-color: #404040;
+    border-color: #505050;
+    color: #ffffff;
+}
+
+.form-control:focus {
+    background-color: #404040;
+    border-color: #007bff;
+    color: #ffffff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.form-control::placeholder {
+    color: #999999;
+}
+
+.btn-outline-light:hover {
+    background-color: #ffffff;
+    color: #000000;
+}
+
+.modal-content {
+    background-color: #2d2d2d;
+    border: 1px solid #404040;
+}
+
+.modal-header {
+    border-bottom: 1px solid #404040;
+}
+
+.modal-footer {
+    border-top: 1px solid #404040;
+}
+
+.book-details {
+    line-height: 1.6;
+}
+
+.book-details .detail-item {
+    margin-bottom: 0.5rem;
+}
+
+.book-details .detail-label {
+    font-weight: bold;
+    color: #007bff;
+}
+
+.book-details .detail-value {
+    color: #cccccc;
+}
+
+.search-filters {
+    background-color: #2d2d2d;
+    border: 1px solid #404040;
+    border-radius: 0.25rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.filter-group {
+    margin-bottom: 1rem;
+}
+
+.filter-group label {
+    font-weight: bold;
+    color: #007bff;
+    margin-bottom: 0.5rem;
+}
+
+.stats-card {
+    text-align: center;
+    padding: 1rem;
+}
+
+.stats-card .stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #007bff;
+}
+
+.stats-card .stat-label {
+    color: #cccccc;
+    font-size: 0.9rem;
+}
+
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+.favorite-btn {
+    color: #dc3545;
+    cursor: pointer;
+    transition: color 0.2s ease-in-out;
+}
+
+.favorite-btn:hover {
+    color: #c82333;
+}
+
+.favorite-btn.active {
+    color: #dc3545;
+}
+
+.favorite-btn:not(.active) {
+    color: #6c757d;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .book-card .card-title {
+        font-size: 0.9rem;
+    }
+    
+    .book-card .card-text {
+        font-size: 0.8rem;
+    }
+    
+    .author-badge, .genre-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.4rem;
+    }
+    
+    .stats-card .stat-number {
+        font-size: 1.5rem;
+    }
+}
+
+/* Animation classes */
+.fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-in-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #2d2d2d;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #505050;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #606060;
+}
+
+/* Image fallback styles */
+.book-cover-fallback {
+    background: linear-gradient(135deg, #374151 0%, #4B5563 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 12px;
+    text-align: center;
+    padding: 10px;
+    border: 2px solid #6B7280;
+    border-radius: 4px;
+}
+
+.book-cover-fallback::before {
+    content: "📚";
+    font-size: 24px;
+    margin-bottom: 8px;
+}
+
+/* Ensure images have proper fallback */
+img[src*="data:image/svg+xml"] {
+    background: #374151;
+}
+
+/* Loading state for images */
+.image-loading {
+    background: linear-gradient(90deg, #374151 25%, #4B5563 50%, #374151 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Enhanced Search Interface Styles */
+.search-interface {
+    background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+    border: 1px solid #4b5563;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1rem;
+}
+
+.search-interface input,
+.search-interface select {
+    background-color: #374151;
+    border: 1px solid #4b5563;
+    color: #ffffff;
+    transition: all 0.2s ease-in-out;
+    font-size: 0.875rem;
+}
+
+.search-interface input:focus,
+.search-interface select:focus {
+    background-color: #4b5563;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.search-interface input::placeholder {
+    color: #9ca3af;
+    font-size: 0.875rem;
+}
+
+.search-interface label {
+    color: #d1d5db;
+    font-weight: 500;
+    font-size: 0.875rem;
+}
+
+/* Compact form elements */
+.search-interface .text-sm {
+    font-size: 0.875rem;
+}
+
+.search-interface .w-20 {
+    width: 5rem;
+}
+
+.search-interface .w-32 {
+    width: 8rem;
+}
+
+/* Progressive Loading Styles */
+.progressive-loader {
+    background: rgba(31, 41, 55, 0.8);
+    backdrop-filter: blur(4px);
+    border-radius: 0.5rem;
+    border: 1px solid #4b5563;
+    padding: 1rem;
+}
+
+.progressive-loader svg {
+    animation: spin 1s linear infinite;
+}
+
+/* Search Results Count */
+.results-count {
+    color: #9ca3af;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Enhanced Card Hover Effects */
+.enhanced-card {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-origin: center;
+}
+
+.enhanced-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+/* Filter Button Styles */
+.filter-button {
+    background: linear-gradient(135deg, #4b5563 0%, #6b7280 100%);
+    border: none;
+    color: #ffffff;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+}
+
+.filter-button:hover {
+    background: linear-gradient(135deg, #6b7280 0%, #9ca3af 100%);
+    transform: translateY(-1px);
+}
+
+.filter-button:active {
+    transform: translateY(0);
+}
+
+/* Clear Filters Button */
+.clear-filters-btn {
+    background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+    border: none;
+    color: #ffffff;
+    font-weight: 500;
+    transition: all 0.2s ease-in-out;
+    min-width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.clear-filters-btn:hover {
+    background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+    transform: translateY(-1px);
+}
+
+/* Responsive Search Interface */
+@media (max-width: 768px) {
+    .search-interface .flex {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .search-interface .flex > div {
+        width: 100%;
+    }
+    
+    .search-interface .min-w-64 {
+        min-width: auto;
+    }
+    
+    .search-interface .w-32 {
+        width: 100%;
+    }
+    
+    .search-interface .w-20 {
+        width: 100%;
+    }
+}
+
+/* Loading States */
+.loading-shimmer {
+    background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Enhanced Search Input Styles */
+.enhanced-search-input {
+    background: rgba(55, 65, 81, 0.8);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(75, 85, 99, 0.5);
+    border-radius: 0.375rem;
+    color: #ffffff;
+    transition: all 0.2s ease-in-out;
+    font-size: 0.875rem;
+}
+
+.enhanced-search-input:focus {
+    background: rgba(75, 85, 99, 0.9);
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.enhanced-search-input::placeholder {
+    color: #9ca3af;
+    opacity: 0.7;
+    font-size: 0.875rem;
+}
+
+/* Compact select styling */
+.enhanced-search-input[type="number"] {
+    text-align: center;
+}
+
+/* Better spacing for compact layout */
+.search-interface .gap-3 > * {
+    margin: 0;
+}
+
+.search-interface .mb-3 {
+    margin-bottom: 0.75rem;
+}

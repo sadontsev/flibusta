@@ -1,0 +1,19 @@
+#/bin/sh
+echo "Конвертация $1" >> /app/sql/status
+if ! grep -q INSERT "/app/sql/$1"; then   
+  echo "Empty table" >> /app/sql/status;
+  exit 1
+fi
+
+xtable="cat /app/sql/$1|grep 'CREATE TABLE'|awk '{print \$3}'| sed 's/^.//;s/.$//'"
+table=$(eval "$xtable")
+
+echo $1
+echo "TRUNCATE $table;" > /app/sql/tmp.sql
+echo $table
+cat /app/sql/$1|grep INSERT|tr -d \`|sed "s/$table/$table/g" >> /app/sql/tmp.sql
+/app/tools/app_db_converter.py /app/sql/tmp.sql /app/sql/psql/$1
+rm /app/sql/tmp.sql
+
+echo "Импорт $1" >> /app/sql/status
+PGPASSWORD=flibusta psql -h postgres -d flibusta -U flibusta -f /app/sql/psql/$1

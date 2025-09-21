@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Флибуста - Домашняя библиотека</title>
+    
+    <!-- Tailwind CSS - Production Build -->
+    <link href="/css/tailwind.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/css/style.css?v=4" rel="stylesheet">
+    
+    <link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a class="flex items-center text-white font-bold text-xl hover:text-blue-200 transition-colors" href="#" onclick="app.showHome()">
+                        <i class="fas fa-book-open mr-2"></i> Флибуста
+                    </a>
+                </div>
+                
+                <div class="hidden md:flex items-center space-x-4">
+                    <a class="text-white hover:text-blue-200 px-3 py-2 rounded-md text-sm font-medium transition-colors" href="#" onclick="app.showBooks()">
+                        <i class="fas fa-books mr-1"></i> Книги
+                    </a>
+                    <a class="text-white hover:text-blue-200 px-3 py-2 rounded-md text-sm font-medium transition-colors" href="#" onclick="app.showAuthors()">
+                        <i class="fas fa-user-edit mr-1"></i> Авторы
+                    </a>
+                    <a class="text-white hover:text-blue-200 px-3 py-2 rounded-md text-sm font-medium transition-colors" href="#" onclick="app.showGenres()">
+                        <i class="fas fa-tags mr-1"></i> Жанры
+                    </a>
+                    <a class="text-white hover:text-blue-200 px-3 py-2 rounded-md text-sm font-medium transition-colors" href="#" onclick="app.showSeries()">
+                        <i class="fas fa-layer-group mr-1"></i> Серии
+                    </a>
+                    <a class="text-white hover:text-blue-200 px-3 py-2 rounded-md text-sm font-medium transition-colors admin-only" href="#" onclick="app.showAdmin()" style="display: none;">
+                        <i class="fas fa-cog mr-1"></i> Админ
+                    </a>
+                </div>
+                
+                <div class="flex items-center space-x-4">
+                    <div class="relative search-container">
+                        <input type="text" class="w-64 px-4 py-2 rounded-lg bg-white/10 text-white placeholder-gray-300 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-400" id="searchInput" placeholder="Поиск книг...">
+                        <button class="absolute right-2 top-2 text-gray-300 hover:text-white transition-colors" onclick="app.performSearch()">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="relative">
+                        <button class="text-white hover:text-blue-200 px-3 py-2 rounded-md text-sm font-medium transition-colors" id="userDropdown" style="display: none;">
+                            <i class="fas fa-user mr-1"></i> <span id="userDisplayName">Пользователь</span>
+                        </button>
+                    </div>
+                    
+                    <a href="/login" class="bg-white text-blue-600 hover:bg-gray-100 px-4 py-2 rounded-lg font-medium transition-colors" id="loginBtn">
+                        <i class="fas fa-sign-in-alt mr-1"></i> Войти
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Content Area -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div id="contentArea">
+            <!-- Default content will be loaded here -->
+        </div>
+    </div>
+
+
+
+    <!-- Change Password Modal -->
+    <div id="changePasswordModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="flex items-center justify-between p-6 border-b border-gray-700">
+                <h5 class="text-xl font-semibold text-white">Сменить пароль</h5>
+                <button type="button" class="text-gray-400 hover:text-white text-2xl" onclick="app.hideChangePasswordModal()">&times;</button>
+            </div>
+            <div class="p-6">
+                <form id="changePasswordForm">
+                    <div class="mb-4">
+                        <label for="currentPassword" class="block text-sm font-medium text-gray-300 mb-2">Текущий пароль</label>
+                        <input type="password" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="currentPassword" required>
+                    </div>
+                    <div class="mb-4">
+                        <label for="newPassword" class="block text-sm font-medium text-gray-300 mb-2">Новый пароль</label>
+                        <input type="password" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="newPassword" required minlength="6">
+                    </div>
+                    <div class="mb-4">
+                        <label for="confirmPassword" class="block text-sm font-medium text-gray-300 mb-2">Подтвердите новый пароль</label>
+                        <input type="password" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="confirmPassword" required minlength="6">
+                    </div>
+                    <div class="hidden bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded mb-4" id="changePasswordError"></div>
+                </form>
+            </div>
+            <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-700">
+                <button type="button" class="px-4 py-2 text-gray-300 hover:text-white" onclick="app.hideChangePasswordModal()">Отмена</button>
+                <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" onclick="app.changePassword()">Сменить пароль</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Modal -->
+    <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="flex items-center justify-between p-6 border-b border-gray-700">
+                <h5 class="text-xl font-semibold text-white">Профиль пользователя</h5>
+                <button type="button" class="text-gray-400 hover:text-white text-2xl" onclick="app.hideProfileModal()">&times;</button>
+            </div>
+            <div class="p-6">
+                <form id="profileForm">
+                    <div class="mb-4">
+                        <label for="profileUsername" class="block text-sm font-medium text-gray-300 mb-2">Имя пользователя</label>
+                        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="profileUsername" readonly>
+                    </div>
+                    <div class="mb-4">
+                        <label for="profileEmail" class="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                        <input type="email" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="profileEmail">
+                    </div>
+                    <div class="mb-4">
+                        <label for="profileDisplayName" class="block text-sm font-medium text-gray-300 mb-2">Отображаемое имя</label>
+                        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="profileDisplayName">
+                    </div>
+                    <div class="hidden bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded mb-4" id="profileError"></div>
+                </form>
+            </div>
+            <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-700">
+                <button type="button" class="px-4 py-2 text-gray-300 hover:text-white" onclick="app.hideProfileModal()">Отмена</button>
+                <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" onclick="app.updateProfile()">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create User Modal (Admin Only) -->
+    <div id="createUserModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div class="flex items-center justify-between p-6 border-b border-gray-700">
+                <h5 class="text-xl font-semibold text-white">Создать пользователя</h5>
+                <button type="button" class="text-gray-400 hover:text-white text-2xl" onclick="app.hideCreateUserModal()">&times;</button>
+            </div>
+            <div class="p-6">
+                <form id="createUserForm">
+                    <div class="mb-4">
+                        <label for="newUserUsername" class="block text-sm font-medium text-gray-300 mb-2">Имя пользователя</label>
+                        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="newUserUsername" required minlength="3">
+                    </div>
+                    <div class="mb-4">
+                        <label for="newUserPassword" class="block text-sm font-medium text-gray-300 mb-2">Пароль</label>
+                        <input type="password" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="newUserPassword" required minlength="6">
+                    </div>
+                    <div class="mb-4">
+                        <label for="newUserEmail" class="block text-sm font-medium text-gray-300 mb-2">Email</label>
+                        <input type="email" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="newUserEmail">
+                    </div>
+                    <div class="mb-4">
+                        <label for="newUserDisplayName" class="block text-sm font-medium text-gray-300 mb-2">Отображаемое имя</label>
+                        <input type="text" class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="newUserDisplayName">
+                    </div>
+                    <div class="mb-4">
+                        <label for="newUserRole" class="block text-sm font-medium text-gray-300 mb-2">Роль</label>
+                        <select class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500" id="newUserRole">
+                            <option value="user">Пользователь</option>
+                            <option value="admin">Администратор</option>
+                        </select>
+                    </div>
+                    <div class="hidden bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded mb-4" id="createUserError"></div>
+                </form>
+            </div>
+            <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-700">
+                <button type="button" class="px-4 py-2 text-gray-300 hover:text-white" onclick="app.hideCreateUserModal()">Отмена</button>
+                <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" onclick="app.createUser()">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast for notifications -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 hidden max-w-sm">
+        <div class="flex items-center justify-between p-4 border-b border-gray-700">
+            <strong class="text-white font-medium" id="toastTitle">Уведомление</strong>
+            <button type="button" class="text-gray-400 hover:text-white text-xl" onclick="app.hideToast()">&times;</button>
+        </div>
+        <div class="p-4 text-gray-300" id="toastBody">
+            Сообщение
+        </div>
+    </div>
+
+    <!-- Module Scripts -->
+    <script src="/js/modules/auth.js"></script>
+    <script src="/js/modules/ui.js"></script>
+    <script src="/js/modules/api.js"></script>
+    <script src="/js/modules/display.js"></script>
+    <script src="/js/modules/progressive-loader.js"></script>
+    <script src="/js/modules/enhanced-search.js"></script>
+    
+    <!-- Main App -->
+    <script src="/js/app.js?v=18"></script>
+</body>
+</html>
