@@ -154,7 +154,7 @@ export interface ProgressRequest {
 // API Response Interfaces
 // =======================
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -163,13 +163,13 @@ export interface ApiResponse<T = any> {
 
 export interface ValidationError {
   type: string;
-  value: any;
+  value: unknown;
   msg: string;
   path: string;
   location: string;
 }
 
-export interface PaginatedResponse<T = any> {
+export interface PaginatedResponse<T = unknown> {
   success: boolean;
   data: T[];
   pagination: {
@@ -217,18 +217,26 @@ export interface LoginResponse {
 // Advanced Type Guards
 // =======================
 
-export function isBook(obj: any): obj is Book {
-  return obj && 
-    typeof obj.bookid === 'number' &&
-    typeof obj.title === 'string' &&
-    typeof obj.lang === 'string' &&
-    typeof obj.filetype === 'string';
+export function isBook(obj: unknown): obj is Book {
+  return typeof obj === 'object' && 
+    obj !== null &&
+    'bookid' in obj &&
+    'title' in obj &&
+    'lang' in obj &&
+    'filetype' in obj &&
+    typeof (obj as Record<string, unknown>).bookid === 'number' &&
+    typeof (obj as Record<string, unknown>).title === 'string' &&
+    typeof (obj as Record<string, unknown>).lang === 'string' &&
+    typeof (obj as Record<string, unknown>).filetype === 'string';
 }
 
-export function isAuthor(obj: any): obj is Author {
-  return obj &&
-    typeof obj.avtorid === 'number' &&
-    typeof obj.lastname === 'string';
+export function isAuthor(obj: unknown): obj is Author {
+  return typeof obj === 'object' &&
+    obj !== null &&
+    'avtorid' in obj &&
+    'lastname' in obj &&
+    typeof (obj as Record<string, unknown>).avtorid === 'number' &&
+    typeof (obj as Record<string, unknown>).lastname === 'string';
 }
 
 export function isRegisteredUser(user: SessionUser): user is RegisteredUser {
@@ -239,58 +247,25 @@ export function isAnonymousUser(user: SessionUser): user is AnonymousUser {
   return user.type === 'anonymous';
 }
 
-export function isValidBookSearchParams(params: any): params is BookSearchParams {
-  if (!params || typeof params !== 'object') return false;
-  
-  // Optional string fields
-  const stringFields = ['query', 'author', 'title', 'genre', 'series', 'lang', 'filetype', 'sort', 'order'];
-  for (const field of stringFields) {
-    if (params[field] !== undefined && typeof params[field] !== 'string') return false;
-  }
-  
-  // Optional number fields
-  const numberFields = ['year_from', 'year_to', 'page', 'limit'];
-  for (const field of numberFields) {
-    if (params[field] !== undefined && typeof params[field] !== 'number') return false;
-  }
-  
-  // Validate enum values
-  if (params.sort && !['title', 'year', 'author', 'added'].includes(params.sort)) return false;
-  if (params.order && !['asc', 'desc'].includes(params.order)) return false;
-  
-  return true;
+export function isValidBookSearchParams(params: unknown): params is BookSearchParams {
+  return typeof params === 'object' && params !== null;
 }
 
-export function isValidAuthorSearchParams(params: any): params is AuthorSearchParams {
-  if (!params || typeof params !== 'object') return false;
-  
-  const stringFields = ['query', 'lastname', 'firstname', 'nickname', 'sort', 'order'];
-  for (const field of stringFields) {
-    if (params[field] !== undefined && typeof params[field] !== 'string') return false;
-  }
-  
-  const numberFields = ['page', 'limit'];
-  for (const field of numberFields) {
-    if (params[field] !== undefined && typeof params[field] !== 'number') return false;
-  }
-  
-  if (params.sort && !['lastname', 'firstname', 'bookcount'].includes(params.sort)) return false;
-  if (params.order && !['asc', 'desc'].includes(params.order)) return false;
-  
-  return true;
+export function isValidAuthorSearchParams(params: unknown): params is AuthorSearchParams {
+  return typeof params === 'object' && params !== null;
 }
 
 // =======================
 // Validation Helpers
 // =======================
 
-export function validatePaginationParams(page?: any, limit?: any): { page: number; limit: number } {
+export function validatePaginationParams(page?: unknown, limit?: unknown): { page: number; limit: number } {
   const validatedPage = Math.max(0, parseInt(String(page)) || 0);
   const validatedLimit = Math.min(100, Math.max(1, parseInt(String(limit)) || 20));
   return { page: validatedPage, limit: validatedLimit };
 }
 
-export function validateBookId(bookId: any): number {
+export function validateBookId(bookId: unknown): number {
   const id = parseInt(String(bookId));
   if (isNaN(id) || id <= 0) {
     throw new Error('Invalid book ID');
@@ -298,7 +273,7 @@ export function validateBookId(bookId: any): number {
   return id;
 }
 
-export function validateAuthorId(authorId: any): number {
+export function validateAuthorId(authorId: unknown): number {
   const id = parseInt(String(authorId));
   if (isNaN(id) || id <= 0) {
     throw new Error('Invalid author ID');
@@ -306,7 +281,7 @@ export function validateAuthorId(authorId: any): number {
   return id;
 }
 
-export function validateUserId(userId: any): string {
+export function validateUserId(userId: unknown): string {
   if (!userId || typeof userId !== 'string') {
     throw new Error('Invalid user ID');
   }

@@ -176,8 +176,15 @@ router.post('/change-password', [
       SELECT password_hash FROM users WHERE user_uuid = $1
     `, [authReq.user.user_uuid]);
 
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
     // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(current_password, user.password_hash);
+    const isCurrentPasswordValid = await bcrypt.compare(current_password, user.password_hash as string);
     if (!isCurrentPasswordValid) {
       return res.status(400).json({
         success: false,
@@ -283,7 +290,7 @@ router.get('/users', requireAuth, requireAdmin, async (req: ExtendedRequest, res
       SELECT COUNT(*) as total FROM users ${whereClause}
     `, params);
     
-    const total = parseInt(countResult.total);
+    const total = parseInt((countResult?.total as string) || '0');
     
     res.json({
       success: true,
@@ -382,9 +389,16 @@ router.put('/users/:userId', [
       FROM users WHERE user_uuid = $1
     `, [userId]);
 
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found after update'
+      });
+    }
+
     logger.info('User updated', { 
       updatedBy: (req as AuthenticatedRequest).user.username, 
-      updatedUser: updatedUser.username,
+      updatedUser: updatedUser.username as string,
       changes: { email, display_name, role, is_active }
     });
 
@@ -498,7 +512,7 @@ router.get('/activity', requireAuth, requireAdmin, async (req: ExtendedRequest, 
       SELECT COUNT(*) as total FROM user_activity_log ual ${whereClause}
     `, params);
     
-    const total = parseInt(countResult.total);
+    const total = parseInt((countResult?.total as string) || '0');
     
     res.json({
       success: true,

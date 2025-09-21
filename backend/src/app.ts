@@ -13,11 +13,11 @@ import genresRoutes from './routes/genres';
 import seriesRoutes from './routes/series';
 import favoritesRoutes from './routes/favorites';
 import authRoutes from './routes/auth';          // Now TypeScript
+import filesRoutes from './routes/files';        // Now TypeScript
 import { initializeSession, addUserToLocals } from './middleware/sessionMiddleware';
 
-// Import JavaScript routes (complex business logic, to be converted later)
-const filesRoutes = require('./routes/files');
-const adminRoutes = require('./routes/admin');   // Still JavaScript
+// Import JavaScript routes (to be converted later)
+const adminRoutes = require('./routes/admin');   // Complex admin routes - JS for now
 const AutomatedUpdateService = require('./services/AutomatedUpdateService');
 const MaintenanceScheduler = require('./scripts/MaintenanceScheduler');
 

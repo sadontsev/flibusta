@@ -136,7 +136,7 @@ const logActivity = (action: string) => {
     const originalSend = res.send;
     
     // Override send method to log activity
-    res.send = function(data: any) {
+    res.send = function(data: unknown) {
       // Call original send first
       const result = originalSend.call(this, data);
       

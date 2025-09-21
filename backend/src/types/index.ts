@@ -81,7 +81,7 @@ export interface AuthenticatedRequest extends Request {
 }
 
 // API Response Types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
@@ -120,7 +120,7 @@ export interface DatabaseConfig {
   ssl?: boolean | object;
 }
 
-export interface QueryResult<T = any> {
+export interface QueryResult<T = Record<string, unknown>> {
   rows: T[];
   rowCount: number;
   command: string;

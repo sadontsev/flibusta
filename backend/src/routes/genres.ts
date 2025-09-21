@@ -9,10 +9,11 @@ const router = express.Router();
 const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       errors: errors.array()
-    }) as any;
+    });
+    return;
   }
   next();
 };
@@ -93,7 +94,7 @@ router.get('/:genreCode', [
       WHERE g.genreid = $1 AND b.deleted = '0'
     `, [genre.genreid]);
 
-    genre.bookCount = parseInt(bookCount.count);
+    genre.bookCount = parseInt((bookCount?.count as string) || '0');
 
     res.json({
       success: true,

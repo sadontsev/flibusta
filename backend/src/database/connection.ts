@@ -29,7 +29,7 @@ pool.on('error', (err: Error): void => {
 });
 
 // Helper function to execute queries
-const query = async <T extends QueryResultRow = any>(text: string, params?: any[]): Promise<QueryResult<T>> => {
+const query = async <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<QueryResult<T>> => {
   const start = Date.now();
   try {
     const res = await pool.query<T>(text, params);
@@ -44,13 +44,13 @@ const query = async <T extends QueryResultRow = any>(text: string, params?: any[
 };
 
 // Helper function to get a single row
-const getRow = async <T extends QueryResultRow = any>(text: string, params?: any[]): Promise<T | null> => {
+const getRow = async <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<T | null> => {
   const result = await query<T>(text, params);
   return result.rows[0] || null;
 };
 
 // Helper function to get multiple rows
-const getRows = async <T extends QueryResultRow = any>(text: string, params?: any[]): Promise<T[]> => {
+const getRows = async <T extends QueryResultRow = QueryResultRow>(text: string, params?: unknown[]): Promise<T[]> => {
   const result = await query<T>(text, params);
   return result.rows;
 };

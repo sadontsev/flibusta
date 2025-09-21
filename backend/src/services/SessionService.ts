@@ -86,7 +86,7 @@ class SessionService {
           return {
             ...user,
             type: 'registered'
-          };
+          } as SessionUser;
         }
       }
 
@@ -173,12 +173,12 @@ class SessionService {
       `, [userUuid]);
 
       return {
-        favorites: favorites,
+        favorites: favorites as any,
         pagination: {
           page,
           limit,
-          total: parseInt(countResult.total),
-          totalPages: Math.ceil(countResult.total / limit)
+          total: parseInt((countResult?.total as string) || '0'),
+          totalPages: Math.ceil(parseInt((countResult?.total as string) || '0') / limit)
         }
       };
     } catch (error) {
@@ -260,12 +260,12 @@ class SessionService {
       `, [userUuid]);
 
       return {
-        progress: progress,
+        progress: progress as any,
         pagination: {
           page,
           limit,
-          total: parseInt(countResult.total),
-          totalPages: Math.ceil(countResult.total / limit)
+          total: parseInt((countResult?.total as string) || '0'),
+          totalPages: Math.ceil(parseInt((countResult?.total as string) || '0') / limit)
         }
       };
     } catch (error) {
@@ -293,7 +293,7 @@ class SessionService {
   /**
    * Get user session statistics
    */
-  async getUserStats(userUuid: string): Promise<any> {
+  async getUserStats(userUuid: string): Promise<Record<string, unknown> | null> {
     try {
       const stats = await getRow(`
         SELECT 

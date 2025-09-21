@@ -73,9 +73,9 @@ class AuthorService {
       `, [authorId]);
 
       return {
-        ...author,
-        annotation,
-        bookCount: parseInt(bookCount.count)
+        ...(author as Author),
+        ...(annotation && { annotation: annotation as { title: string; body: string; } }),
+        bookCount: parseInt((bookCount?.count as string) || '0')
       };
     } catch (error) {
       logger.error('Error getting author by ID', { authorId, error: (error as Error).message });
@@ -124,7 +124,7 @@ class AuthorService {
 
       // Build ORDER BY clause based on sort parameter
       let orderBy = 'a.lastname ASC, a.firstname ASC'; // default
-      let orderByParams: any[] = [];
+      let orderByParams: string[] = [];
       
       switch (sort) {
         case 'relevance':
@@ -174,7 +174,7 @@ class AuthorService {
         WHERE ${whereClause}
       `, params);
 
-      const total = parseInt(countResult.total);
+      const total = parseInt((countResult?.total as string) || '0');
 
       // Combine params with orderByParams for relevance sorting
       const finalParams = [...params, ...orderByParams, limit, offset];
@@ -209,7 +209,7 @@ class AuthorService {
       `, finalParams);
 
       return {
-        authors,
+        authors: authors as Author[],
         pagination: {
           page,
           limit,
@@ -236,7 +236,7 @@ class AuthorService {
         WHERE lastname ILIKE $1
       `, [`${letter}%`]);
 
-      const total = parseInt(countResult.total);
+      const total = parseInt((countResult?.total as string) || '0');
 
       // Get authors
       const authors = await getRows(`
@@ -258,11 +258,11 @@ class AuthorService {
           WHERE a.avtorid = $1 AND b.deleted = '0'
         `, [author.avtorid]);
         
-        author.bookCount = parseInt(bookCount.count);
+        author.bookCount = parseInt((bookCount?.count as string) || '0');
       }
 
       return {
-        authors,
+        authors: authors as Author[],
         pagination: {
           page,
           limit,
@@ -276,7 +276,7 @@ class AuthorService {
     }
   }
 
-  async getAuthorStatistics(): Promise<any> {
+  async getAuthorStatistics(): Promise<Record<string, unknown> | null> {
     try {
       const stats = await getRow(`
         SELECT 
@@ -307,14 +307,14 @@ class AuthorService {
         LIMIT $1
       `, [limit]);
 
-      return authors;
+      return authors as Author[];
     } catch (error) {
       logger.error('Error getting popular authors', { error: (error as Error).message });
       throw error;
     }
   }
 
-  async getAuthorAliases(authorId: number): Promise<any[]> {
+  async getAuthorAliases(authorId: number): Promise<Record<string, unknown>[]> {
     try {
       const aliases = await getRows(`
         SELECT a.aliaseid, a.badid, a.goodid,

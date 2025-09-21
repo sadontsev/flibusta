@@ -360,8 +360,8 @@ export function extractBookSearchParams(req: ExtendedRequest): BookSearchParams 
   const params: BookSearchParams = {
     page: parseInt(query.page as string) || 0,
     limit: parseInt(query.limit as string) || 20,
-    sort: query.sort as any || 'title',
-    order: query.order as any || 'asc'
+    sort: (query.sort as 'title' | 'year' | 'author' | 'added') || 'title',
+    order: (query.order as 'asc' | 'desc') || 'asc'
   };
   
   // Add optional properties only if they exist
@@ -383,8 +383,8 @@ export function extractAuthorSearchParams(req: ExtendedRequest): AuthorSearchPar
   const params: AuthorSearchParams = {
     page: parseInt(query.page as string) || 0,
     limit: parseInt(query.limit as string) || 20,
-    sort: query.sort as any || 'lastname',
-    order: query.order as any || 'asc'
+    sort: (query.sort as 'lastname' | 'firstname' | 'bookcount') || 'lastname',
+    order: (query.order as 'asc' | 'desc') || 'asc'
   };
   
   // Add optional properties only if they exist

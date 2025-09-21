@@ -9,10 +9,11 @@ const router = express.Router();
 const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({
+    res.status(400).json({
       success: false,
       errors: errors.array()
-    }) as any;
+    });
+    return;
   }
   next();
 };
@@ -31,7 +32,7 @@ router.get('/', [
     const limit = parseInt((req.query.limit as string) || '50');
 
     const conditions = ['1=1'];
-    const params: any[] = [];
+    const params: string[] = [];
     let paramIndex = 1;
 
     // Search by name
@@ -58,7 +59,7 @@ router.get('/', [
       WHERE ${whereClause}
     `, params);
 
-    const total = parseInt(countResult.total);
+    const total = parseInt((countResult?.total as string) || '0');
 
     // Get series
     const series = await getRows(`
@@ -162,7 +163,7 @@ router.get('/letter/:letter', [
       WHERE seqname ILIKE $1
     `, [`${letter}%`]);
 
-    const total = parseInt(countResult.total);
+    const total = parseInt((countResult?.total as string) || '0');
 
     // Get series
     const series = await getRows(`

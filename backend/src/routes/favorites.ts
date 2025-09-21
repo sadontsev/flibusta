@@ -46,7 +46,7 @@ router.get('/books', requireAuth, createTypeSafeHandler(async (req: ExtendedRequ
 
   const result = await dbQuery(queryText, [userId, limit, offset]);
   const books = result.rows;
-  const totalCount = books.length > 0 ? parseInt(books[0].total_count) : 0;
+  const totalCount = books.length > 0 ? parseInt((books[0]?.total_count as string) || '0') : 0;
 
   return res.json(buildPaginatedResponse(books, page, limit, totalCount));
 }));
@@ -131,7 +131,7 @@ router.get('/authors', requireAuth, createTypeSafeHandler(async (req: ExtendedRe
 
   const result = await dbQuery(queryText, [userId, limit, offset]);
   const authors = result.rows;
-  const totalCount = authors.length > 0 ? parseInt(authors[0].total_count) : 0;
+  const totalCount = authors.length > 0 ? parseInt((authors[0]?.total_count as string) || '0') : 0;
 
   return res.json(buildPaginatedResponse(authors, page, limit, totalCount));
 }));
@@ -217,7 +217,7 @@ router.get('/series', requireAuth, createTypeSafeHandler(async (req: ExtendedReq
 
   const result = await dbQuery(queryText, [userId, limit, offset]);
   const series = result.rows;
-  const totalCount = series.length > 0 ? parseInt(series[0].total_count) : 0;
+  const totalCount = series.length > 0 ? parseInt((series[0]?.total_count as string) || '0') : 0;
 
   return res.json(buildPaginatedResponse(series, page, limit, totalCount));
 }));
@@ -313,7 +313,7 @@ router.post('/check', [
   const userUuid = user.user_uuid;
   const { books, authors, series } = req.body;
 
-  const result: any = {};
+  const result: Record<string, unknown> = {};
 
   if (books && Array.isArray(books)) {
     const bookIds = books.filter(id => Number.isInteger(id));

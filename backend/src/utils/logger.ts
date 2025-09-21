@@ -66,7 +66,7 @@ interface LoggerStream {
   write: (message: string) => void;
 }
 
-(logger as any).stream = {
+(logger as unknown as { stream: LoggerStream }).stream = {
   write: (message: string): void => {
     logger.info(message.trim());
   }

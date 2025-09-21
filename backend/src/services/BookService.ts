@@ -126,11 +126,11 @@ class BookService {
       `, [bookId]);
 
       return {
-        ...book,
-        authors,
-        genres,
-        series,
-        reviews
+        ...(book as any),
+        authors: authors as any,
+        genres: genres as any,
+        series: series as any,
+        reviews: reviews as any
       };
     } catch (error) {
       logger.error('Error getting book by ID', { bookId, error: (error as Error).message });
@@ -268,7 +268,7 @@ class BookService {
 
       // Build ORDER BY clause based on sort parameter
       let orderBy = 'b.bookid DESC'; // default
-      let orderByParams: any[] = [];
+      let orderByParams: string[] = [];
       
       switch (sort) {
         case 'relevance':
@@ -352,7 +352,7 @@ class BookService {
       
       const countParams = params; // Use original params for count query
       const countResult = await getRow(countSql, countParams);
-      const total = parseInt(countResult.total);
+      const total = parseInt((countResult?.total as string) || '0');
 
       // Enhance books with additional data
       const enhancedBooks = await Promise.all(books.map(async (book) => {
@@ -385,7 +385,7 @@ class BookService {
       }));
 
       return {
-        books: enhancedBooks,
+        books: enhancedBooks as any,
         pagination: {
           page,
           limit,
@@ -423,7 +423,7 @@ class BookService {
         book.authors = authors;
       }
 
-      return books;
+      return books as any;
     } catch (error) {
       logger.error('Error getting recent books', { error: (error as Error).message });
       throw error;
@@ -442,7 +442,7 @@ class BookService {
         WHERE a.avtorid = $1 AND b.deleted = '0'
       `, [authorId]);
 
-      const total = parseInt(countResult.total);
+      const total = parseInt((countResult?.total as string) || '0');
 
       // Get books
       const books = await getRows(`
@@ -467,7 +467,7 @@ class BookService {
       }
 
       return {
-        books,
+        books: books as any,
         pagination: {
           page,
           limit,
@@ -494,7 +494,7 @@ class BookService {
         WHERE gl.genrecode = $1 AND b.deleted = '0'
       `, [genreCode]);
 
-      const total = parseInt(countResult.total);
+      const total = parseInt((countResult?.total as string) || '0');
 
       // Get books
       const books = await getRows(`
@@ -520,7 +520,7 @@ class BookService {
       }
 
       return {
-        books,
+        books: books as any,
         pagination: {
           page,
           limit,
@@ -534,7 +534,7 @@ class BookService {
     }
   }
 
-  async getBookFileInfo(bookId: number): Promise<any> {
+  async getBookFileInfo(bookId: number): Promise<Record<string, unknown> | null> {
     try {
       const fileInfo = await getRow(`
         SELECT filename, start_id, end_id, usr
