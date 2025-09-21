@@ -14,6 +14,7 @@ const filesRoutes = require('./routes/files');
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');
 const AutomatedUpdateService = require('./services/AutomatedUpdateService');
+const MaintenanceScheduler = require('./scripts/MaintenanceScheduler');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -105,6 +106,12 @@ app.use(express.static(path.join(__dirname, '../public')));
 // Initialize automated update service
 const automatedUpdateService = new AutomatedUpdateService();
 
+// Initialize maintenance scheduler
+let maintenanceScheduler = null;
+if (process.env.ENABLE_MAINTENANCE_SCHEDULER === 'true') {
+    maintenanceScheduler = new MaintenanceScheduler();
+}
+
 // Initialize superadmin user
 const { initSuperadmin } = require('./database/init-superadmin');
 
@@ -122,6 +129,12 @@ app.listen(PORT, async () => {
         // Then initialize automated update service
         await automatedUpdateService.initialize();
         logger.info('Automated update service started successfully');
+        
+        // Start maintenance scheduler if enabled
+        if (maintenanceScheduler) {
+            maintenanceScheduler.start();
+            logger.info('Maintenance scheduler started successfully');
+        }
     } catch (error) {
         logger.error('Failed to initialize services:', error);
     }
@@ -131,11 +144,17 @@ app.listen(PORT, async () => {
 process.on('SIGTERM', async () => {
     logger.info('SIGTERM received, shutting down gracefully...');
     await automatedUpdateService.stop();
+    if (maintenanceScheduler) {
+        maintenanceScheduler.stop();
+    }
     process.exit(0);
 });
 
 process.on('SIGINT', async () => {
     logger.info('SIGINT received, shutting down gracefully...');
     await automatedUpdateService.stop();
+    if (maintenanceScheduler) {
+        maintenanceScheduler.stop();
+    }
     process.exit(0);
 });

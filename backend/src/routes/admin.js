@@ -2,10 +2,17 @@ const express = require('express');
 const router = express.Router();
 const UpdateService = require('../services/UpdateService');
 const { requireAuth, requireRole, requireAdmin } = require('../middleware/auth');
+const DatabaseManager = require('../scripts/DatabaseManager');
+const MaintenanceScheduler = require('../scripts/MaintenanceScheduler');
+const logger = require('../utils/logger');
 
 const updateService = new UpdateService();
 const AutomatedUpdateService = require('../services/AutomatedUpdateService');
 const automatedUpdateService = new AutomatedUpdateService();
+const dbManager = new DatabaseManager();
+
+// Global maintenance scheduler instance
+let maintenanceScheduler = null;
 
 // Get admin dashboard data
 router.get('/dashboard', requireAuth, requireAdmin, async (req, res) => {
@@ -431,6 +438,303 @@ router.post('/automated/trigger/:type', requireAuth, requireAdmin, async (req, r
         });
     } catch (error) {
         console.error('Error triggering automated update:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// === NEW MANAGEMENT ENDPOINTS ===
+
+// Get enhanced database statistics
+router.get('/stats', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const stats = await dbManager.getDatabaseStats();
+        res.json({
+            success: true,
+            stats: stats
+        });
+    } catch (error) {
+        console.error('Error getting database stats:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Perform database health check
+router.get('/health', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const health = await dbManager.healthCheck();
+        res.json({
+            success: true,
+            healthy: health.healthy,
+            issues: health.issues
+        });
+    } catch (error) {
+        console.error('Error performing health check:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Download SQL files
+router.post('/download-sql', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        await dbManager.downloadSqlFiles();
+        res.json({
+            success: true,
+            message: 'SQL files downloaded successfully'
+        });
+    } catch (error) {
+        console.error('Error downloading SQL files:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Download cover files
+router.post('/download-covers', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        await dbManager.downloadCoverFiles();
+        res.json({
+            success: true,
+            message: 'Cover files downloaded successfully'
+        });
+    } catch (error) {
+        console.error('Error downloading cover files:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Update ZIP mappings
+router.post('/update-zip-mappings', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const result = await dbManager.updateZipMappings();
+        res.json({
+            success: true,
+            message: 'ZIP mappings updated successfully',
+            mappingsCount: result.mappingsCount
+        });
+    } catch (error) {
+        console.error('Error updating ZIP mappings:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Update search vectors
+router.post('/update-search-vectors', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        await dbManager.updateSearchVectors();
+        res.json({
+            success: true,
+            message: 'Search vectors updated successfully'
+        });
+    } catch (error) {
+        console.error('Error updating search vectors:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Create missing filenames
+router.post('/create-missing-filenames', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const result = await dbManager.createMissingFilenames();
+        res.json({
+            success: true,
+            message: 'Missing filename entries created successfully',
+            created: result.created
+        });
+    } catch (error) {
+        console.error('Error creating missing filenames:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Start maintenance scheduler
+router.post('/scheduler/start', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        if (maintenanceScheduler) {
+            return res.status(400).json({
+                success: false,
+                error: 'Maintenance scheduler is already running'
+            });
+        }
+
+        maintenanceScheduler = new MaintenanceScheduler();
+        maintenanceScheduler.start();
+
+        res.json({
+            success: true,
+            message: 'Maintenance scheduler started successfully'
+        });
+    } catch (error) {
+        console.error('Error starting maintenance scheduler:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Stop maintenance scheduler
+router.post('/scheduler/stop', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        if (!maintenanceScheduler) {
+            return res.status(400).json({
+                success: false,
+                error: 'Maintenance scheduler is not running'
+            });
+        }
+
+        maintenanceScheduler.stop();
+        maintenanceScheduler = null;
+
+        res.json({
+            success: true,
+            message: 'Maintenance scheduler stopped successfully'
+        });
+    } catch (error) {
+        console.error('Error stopping maintenance scheduler:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Get scheduler status
+router.get('/scheduler/status', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        if (!maintenanceScheduler) {
+            return res.json({
+                success: true,
+                running: false,
+                tasks: {}
+            });
+        }
+
+        const status = maintenanceScheduler.getStatus();
+        res.json({
+            success: true,
+            running: true,
+            tasks: status
+        });
+    } catch (error) {
+        console.error('Error getting scheduler status:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Manually run a specific maintenance task
+router.post('/scheduler/run/:taskName', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const { taskName } = req.params;
+        
+        if (!maintenanceScheduler) {
+            return res.status(400).json({
+                success: false,
+                error: 'Maintenance scheduler is not running'
+            });
+        }
+
+        const result = await maintenanceScheduler.runTask(taskName);
+        res.json({
+            success: true,
+            message: `Task ${taskName} executed successfully`,
+            result: result
+        });
+    } catch (error) {
+        console.error(`Error running task ${req.params.taskName}:`, error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Toggle a specific maintenance task
+router.post('/scheduler/toggle/:taskName', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const { taskName } = req.params;
+        const { enabled } = req.body;
+        
+        if (!maintenanceScheduler) {
+            return res.status(400).json({
+                success: false,
+                error: 'Maintenance scheduler is not running'
+            });
+        }
+
+        maintenanceScheduler.toggleTask(taskName, enabled);
+        res.json({
+            success: true,
+            message: `Task ${taskName} ${enabled ? 'enabled' : 'disabled'} successfully`
+        });
+    } catch (error) {
+        console.error(`Error toggling task ${req.params.taskName}:`, error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Perform full setup
+router.post('/full-setup', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        // This is a long-running operation, consider using a job queue in production
+        logger.info('Starting full setup via API...');
+        
+        // Download SQL files
+        await dbManager.downloadSqlFiles();
+        
+        // Download covers
+        await dbManager.downloadCoverFiles();
+        
+        // Update daily books (using existing automated service)
+        await automatedUpdateService.runScheduledUpdate('daily_books');
+        
+        // Update ZIP mappings
+        const zipResult = await dbManager.updateZipMappings();
+        
+        // Create missing filenames
+        const filenameResult = await dbManager.createMissingFilenames();
+        
+        // Update search vectors
+        await dbManager.updateSearchVectors();
+
+        res.json({
+            success: true,
+            message: 'Full setup completed successfully',
+            results: {
+                zipMappings: zipResult.mappingsCount,
+                createdFilenames: filenameResult.created
+            }
+        });
+    } catch (error) {
+        logger.error('Full setup failed:', error);
         res.status(500).json({
             success: false,
             error: error.message

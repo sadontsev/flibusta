@@ -9,7 +9,8 @@
     "test": "jest",
     "lint": "eslint src/",
     "migrate": "node src/database/migrate.js",
-    "init-superadmin": "node src/database/init-superadmin.js"
+    "init-superadmin": "node src/database/init-superadmin.js",
+    "manage": "node src/scripts/manage.js"
   },
   "keywords": [
     "library",
@@ -40,7 +41,8 @@
     "pg": "^8.11.3",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
-    "xml2js": "^0.6.2"
+    "xml2js": "^0.6.2",
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
