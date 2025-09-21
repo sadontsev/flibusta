@@ -1,11 +1,15 @@
-const express = require('express');
-const session = require('express-session');
-const pgSession = require('connect-pg-simple')(session);
-const cors = require('cors');
-const path = require('path');
-const logger = require('./utils/logger');
+import express from 'express';
+import session from 'express-session';
+import pgSession from 'connect-pg-simple';
+import cors from 'cors';
+import path from 'path';
+import logger from './utils/logger';
 
-// Import routes
+// Import converted TypeScript routes
+import sessionRoutes from './routes/session';
+import { initializeSession, addUserToLocals } from './middleware/sessionMiddleware';
+
+// Import JavaScript routes (still to be converted)
 const booksRoutes = require('./routes/books');
 const authorsRoutes = require('./routes/authors');
 const genresRoutes = require('./routes/genres');
@@ -19,6 +23,9 @@ const MaintenanceScheduler = require('./scripts/MaintenanceScheduler');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Create the PostgreSQL session store
+const PostgreSQLStore = pgSession(session);
+
 // Basic middleware
 app.use(cors({
     origin: true,
@@ -30,10 +37,10 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Session configuration
 app.use(session({
-    store: new pgSession({
+    store: new PostgreSQLStore({
         conObject: {
             host: process.env.DB_HOST || 'postgres',
-            port: process.env.DB_PORT || 5432,
+            port: parseInt(process.env.DB_PORT || '5432'),
             database: process.env.DB_NAME || 'flibusta',
             user: process.env.DB_USER || 'flibusta',
             password: process.env.DB_PASSWORD || 'flibusta'
@@ -46,10 +53,14 @@ app.use(session({
     cookie: {
         secure: false, // Set to false for development
         httpOnly: true,
-        maxAge: parseInt(process.env.SESSION_MAX_AGE) || 24 * 60 * 60 * 1000, // 24 hours
+        maxAge: parseInt(process.env.SESSION_MAX_AGE || '86400000'), // 24 hours
         sameSite: 'lax'
     }
 }));
+
+// Initialize sessions for all requests
+app.use(initializeSession);
+app.use(addUserToLocals);
 
 // Static files
 app.use('/static', express.static('public'));
@@ -67,9 +78,10 @@ app.use('/api/series', seriesRoutes);
 app.use('/api/files', filesRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/session', sessionRoutes);
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (req: express.Request, res: express.Response) => {
     res.json({ 
         status: 'OK', 
         timestamp: new Date().toISOString(),
@@ -78,17 +90,17 @@ app.get('/health', (req, res) => {
 });
 
 // Serve the main application
-app.get('/', (req, res) => {
+app.get('/', (req: express.Request, res: express.Response) => {
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
 // Serve the login page
-app.get('/login', (req, res) => {
+app.get('/login', (req: express.Request, res: express.Response) => {
     res.sendFile(path.join(__dirname, '../public/login.html'));
 });
 
 // Serve the debug page
-app.get('/debug', (req, res) => {
+app.get('/debug', (req: express.Request, res: express.Response) => {
     res.sendFile(path.join(__dirname, '../public/debug.html'));
 });
 
@@ -107,13 +119,12 @@ app.use(express.static(path.join(__dirname, '../public')));
 const automatedUpdateService = new AutomatedUpdateService();
 
 // Initialize maintenance scheduler
-let maintenanceScheduler = null;
+let maintenanceScheduler: typeof MaintenanceScheduler | null = null;
 if (process.env.ENABLE_MAINTENANCE_SCHEDULER === 'true') {
     maintenanceScheduler = new MaintenanceScheduler();
 }
 
-// Initialize superadmin user
-const { initSuperadmin } = require('./database/init-superadmin');
+// Initialize superadmin user (moved require to where it's used)
 
 // Start server
 app.listen(PORT, async () => {
@@ -123,6 +134,7 @@ app.listen(PORT, async () => {
     
     try {
         // Initialize superadmin user first
+        const { initSuperadmin } = require('./database/init-superadmin');
         await initSuperadmin();
         logger.info('Superadmin user initialized successfully');
         

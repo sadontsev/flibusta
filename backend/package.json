@@ -2,15 +2,19 @@
   "name": "flibusta-backend",
   "version": "1.0.0",
   "description": "Modern Node.js backend for Flibusta library system",
-  "main": "src/app.js",
+  "main": "dist/app.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "nodemon src/app.js",
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
+    "dev:watch": "nodemon --exec ts-node src/app.ts",
     "test": "jest",
-    "lint": "eslint src/",
-    "migrate": "node src/database/migrate.js",
-    "init-superadmin": "node src/database/init-superadmin.js",
-    "manage": "node src/scripts/manage.js"
+    "lint": "eslint src/ --ext .ts",
+    "lint:fix": "eslint src/ --ext .ts --fix",
+    "type-check": "tsc --noEmit",
+    "migrate": "ts-node src/database/migrate.ts",
+    "init-superadmin": "ts-node src/database/init-superadmin.ts",
+    "manage": "ts-node src/scripts/manage.ts"
   },
   "keywords": [
     "library",
@@ -45,11 +49,32 @@
     "yargs": "^17.7.2"
   },
   "devDependencies": {
-    "@types/node": "^20.10.0",
+    "@types/adm-zip": "^0.5.7",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.8.1",
+    "@types/connect-pg-simple": "^7.0.3",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.23",
+    "@types/express-session": "^1.18.2",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
+    "@types/multer": "^1.4.13",
+    "@types/node": "^20.19.17",
+    "@types/node-cron": "^3.0.11",
+    "@types/pg": "^8.15.5",
+    "@types/uuid": "^9.0.8",
+    "@types/xml2js": "^0.4.14",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.55.0",
     "jest": "^29.7.0",
     "nodemon": "^3.0.2",
-    "supertest": "^6.3.3"
+    "supertest": "^6.3.3",
+    "ts-jest": "^29.4.4",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.9.2"
   },
   "engines": {
     "node": ">=18.0.0"

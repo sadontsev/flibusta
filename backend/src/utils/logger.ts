@@ -1,6 +1,6 @@
-const winston = require('winston');
-const path = require('path');
-const fs = require('fs');
+import winston from 'winston';
+import path from 'path';
+import fs from 'fs';
 
 // Create logs directory if it doesn't exist
 const logsDir = path.join(__dirname, '../../logs');
@@ -23,7 +23,7 @@ const consoleFormat = winston.format.combine(
   winston.format.timestamp({
     format: 'YYYY-MM-DD HH:mm:ss'
   }),
-  winston.format.printf(({ timestamp, level, message, ...meta }) => {
+  winston.format.printf(({ timestamp, level, message, ...meta }): string => {
     let msg = `${timestamp} [${level}]: ${message}`;
     if (Object.keys(meta).length > 0) {
       msg += ` ${JSON.stringify(meta)}`;
@@ -62,10 +62,14 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Create a stream object for Morgan
-logger.stream = {
-  write: (message) => {
+interface LoggerStream {
+  write: (message: string) => void;
+}
+
+(logger as any).stream = {
+  write: (message: string): void => {
     logger.info(message.trim());
   }
-};
+} as LoggerStream;
 
-module.exports = logger;
+export default logger;

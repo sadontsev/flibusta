@@ -37,8 +37,13 @@ class AutomatedUpdateService {
             await query(updateHistorySQL);
             console.log('Update history tables created/verified');
         } catch (error) {
-            console.error('Error creating update tables:', error);
-            throw error;
+            // Log the error but don't throw if it's just duplicate objects
+            if (error.code === '42710' || error.message.includes('already exists')) {
+                console.log('Update tables already exist, continuing...');
+            } else {
+                console.error('Error creating update tables:', error);
+                throw error;
+            }
         }
     }
 
