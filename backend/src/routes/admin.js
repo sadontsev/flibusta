@@ -1,8 +1,8 @@
 const express = require('express');
-const router = express.Router();
-const UpdateService = require('../services/UpdateService');
 const { requireAuth, requireRole, requireAdmin } = require('../middleware/auth');
 
+const router = express.Router();
+const UpdateService = require('../services/UpdateService');
 const updateService = new UpdateService();
 const AutomatedUpdateService = require('../services/AutomatedUpdateService');
 const automatedUpdateService = new AutomatedUpdateService();

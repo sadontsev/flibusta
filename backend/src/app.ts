@@ -12,12 +12,12 @@ import authorsRoutes from './routes/authors';
 import genresRoutes from './routes/genres';
 import seriesRoutes from './routes/series';
 import favoritesRoutes from './routes/favorites';
+import authRoutes from './routes/auth';          // Now TypeScript
 import { initializeSession, addUserToLocals } from './middleware/sessionMiddleware';
 
 // Import JavaScript routes (complex business logic, to be converted later)
 const filesRoutes = require('./routes/files');
-const authRoutes = require('./routes/auth');
-const adminRoutes = require('./routes/admin');
+const adminRoutes = require('./routes/admin');   // Still JavaScript
 const AutomatedUpdateService = require('./services/AutomatedUpdateService');
 const MaintenanceScheduler = require('./scripts/MaintenanceScheduler');
 
