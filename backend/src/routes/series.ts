@@ -1,17 +1,18 @@
-const express = require('express');
-const { query, param, validationResult } = require('express-validator');
-const { getRow, getRows } = require('../database/connection');
+import express, { Response, NextFunction } from 'express';
+import { query, param, validationResult } from 'express-validator';
+import { getRow, getRows } from '../database/connection';
+import { ExtendedRequest } from '../types';
 
 const router = express.Router();
 
 // Validation middleware
-const validate = (req, res, next) => {
+const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       errors: errors.array()
-    });
+    }) as any;
   }
   next();
 };
@@ -22,17 +23,15 @@ router.get('/', [
   query('letter').optional().isString().isLength({ min: 1, max: 1 }),
   query('page').optional().isInt({ min: 0 }),
   query('limit').optional().isInt({ min: 1, max: 100 })
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const {
-      q = '',
-      letter = '',
-      page = 0,
-      limit = 50
-    } = req.query;
+    const q = (req.query.q as string) || '';
+    const letter = (req.query.letter as string) || '';
+    const page = parseInt((req.query.page as string) || '0');
+    const limit = parseInt((req.query.limit as string) || '50');
 
     let conditions = ['1=1'];
-    let params = [];
+    let params: any[] = [];
     let paramIndex = 1;
 
     // Search by name
@@ -78,8 +77,8 @@ router.get('/', [
       success: true,
       data: series,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: page,
+        limit: limit,
         total,
         pages: Math.ceil(total / limit)
       }
@@ -92,9 +91,9 @@ router.get('/', [
 // Get series by ID
 router.get('/:id', [
   param('id').isInt({ min: 1 }).withMessage('Series ID must be a positive integer')
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const seriesId = parseInt(req.params.id);
+    const seriesId = parseInt(req.params.id!);
     
     const series = await getRow(`
       SELECT seqid, seqname
@@ -103,10 +102,11 @@ router.get('/:id', [
     `, [seriesId]);
 
     if (!series) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Series not found'
       });
+      return;
     }
 
     // Get books in this series
@@ -148,11 +148,11 @@ router.get('/letter/:letter', [
   param('letter').isString().isLength({ min: 1, max: 1 }).withMessage('Letter must be a single character'),
   query('page').optional().isInt({ min: 0 }),
   query('limit').optional().isInt({ min: 1, max: 100 })
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const letter = req.params.letter.toUpperCase();
-    const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 50;
+    const letter = req.params.letter!.toUpperCase();
+    const page = parseInt(req.query.page as string) || 0;
+    const limit = parseInt(req.query.limit as string) || 50;
     const offset = page * limit;
 
     // Get total count
@@ -218,4 +218,4 @@ router.get('/stats/overview', async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

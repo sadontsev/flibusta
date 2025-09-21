@@ -7,13 +7,13 @@ import logger from './utils/logger';
 
 // Import converted TypeScript routes
 import sessionRoutes from './routes/session';
+import booksRoutes from './routes/books';
+import authorsRoutes from './routes/authors';
+import genresRoutes from './routes/genres';
+import seriesRoutes from './routes/series';
 import { initializeSession, addUserToLocals } from './middleware/sessionMiddleware';
 
 // Import JavaScript routes (still to be converted)
-const booksRoutes = require('./routes/books');
-const authorsRoutes = require('./routes/authors');
-const genresRoutes = require('./routes/genres');
-const seriesRoutes = require('./routes/series');
 const filesRoutes = require('./routes/files');
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');

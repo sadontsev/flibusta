@@ -1,19 +1,21 @@
-const express = require('express');
-const { body, query, param, validationResult } = require('express-validator');
-const BookService = require('../services/BookService');
+import express, { Response, NextFunction } from 'express';
+import { body, query, param, validationResult, ValidationError } from 'express-validator';
+import logger from '../utils/logger';
+import { ExtendedRequest } from '../types';
+// Note: These are still in JS, using require for now
 const { optionalAuth } = require('../middleware/auth');
-const logger = require('../utils/logger');
+const BookService = require('../services/BookService');
 
 const router = express.Router();
 
 // Validation middleware
-const validate = (req, res, next) => {
+const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       errors: errors.array()
-    });
+    }) as any;
   }
   next();
 };
@@ -21,9 +23,9 @@ const validate = (req, res, next) => {
 // Get recent books
 router.get('/recent', [
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100')
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit as string) || 20;
     const books = await BookService.getRecentBooks(limit);
     
     res.json({
@@ -46,18 +48,18 @@ router.get('/search', [
   query('sort').optional().isIn(['relevance', 'date', 'title', 'title_desc', 'author', 'author_desc', 'year', 'year_desc', 'rating', 'rating_asc']),
   query('page').optional().isInt({ min: 0 }),
   query('limit').optional().isInt({ min: 1, max: 100 })
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const searchParams = {
-      query: req.query.q,
-      author: req.query.author,
-      genre: req.query.genre,
-      series: req.query.series,
-      year: req.query.year,
-      language: req.query.language || 'ru',
-      sort: req.query.sort || 'relevance',
-      page: parseInt(req.query.page) || 0,
-      limit: parseInt(req.query.limit) || 10
+      query: req.query.q as string,
+      author: req.query.author as string,
+      genre: req.query.genre as string,
+      series: req.query.series as string,
+      year: req.query.year as string,
+      language: (req.query.language as string) || 'ru',
+      sort: (req.query.sort as string) || 'relevance',
+      page: parseInt(req.query.page as string) || 0,
+      limit: parseInt(req.query.limit as string) || 10
     };
 
     const result = await BookService.searchBooks(searchParams);
@@ -75,16 +77,17 @@ router.get('/search', [
 // Get book by ID
 router.get('/:id', [
   param('id').isInt({ min: 1 }).withMessage('Book ID must be a positive integer')
-], validate, optionalAuth, async (req, res, next) => {
+], validate, optionalAuth, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const bookId = parseInt(req.params.id);
+    const bookId = parseInt(req.params.id!);
     const book = await BookService.getBookById(bookId);
     
     if (!book) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Book not found'
       });
+      return;
     }
 
     // Add user-specific data if authenticated
@@ -125,11 +128,11 @@ router.get('/author/:authorId', [
   param('authorId').isInt({ min: 1 }).withMessage('Author ID must be a positive integer'),
   query('page').optional().isInt({ min: 0 }),
   query('limit').optional().isInt({ min: 1, max: 100 })
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const authorId = parseInt(req.params.authorId);
-    const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 10;
+    const authorId = parseInt(req.params.authorId!);
+    const page = parseInt(req.query.page as string) || 0;
+    const limit = parseInt(req.query.limit as string) || 10;
     
     const result = await BookService.getBooksByAuthor(authorId, page, limit);
     
@@ -148,11 +151,11 @@ router.get('/genre/:genreCode', [
   param('genreCode').isString().trim().notEmpty().withMessage('Genre code is required'),
   query('page').optional().isInt({ min: 0 }),
   query('limit').optional().isInt({ min: 1, max: 100 })
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const genreCode = req.params.genreCode;
-    const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 10;
+    const genreCode = req.params.genreCode!;
+    const page = parseInt(req.query.page as string) || 0;
+    const limit = parseInt(req.query.limit as string) || 10;
     
     const result = await BookService.getBooksByGenre(genreCode, page, limit);
     
@@ -169,16 +172,17 @@ router.get('/genre/:genreCode', [
 // Get book file info (for downloading)
 router.get('/:id/file-info', [
   param('id').isInt({ min: 1 }).withMessage('Book ID must be a positive integer')
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const bookId = parseInt(req.params.id);
+    const bookId = parseInt(req.params.id!);
     const fileInfo = await BookService.getBookFileInfo(bookId);
     
     if (!fileInfo) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Book file not found'
       });
+      return;
     }
     
     res.json({
@@ -191,7 +195,7 @@ router.get('/:id/file-info', [
 });
 
 // Get book statistics
-router.get('/stats/overview', async (req, res, next) => {
+router.get('/stats/overview', async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { getRow } = require('../database/connection');
     
@@ -215,4 +219,4 @@ router.get('/stats/overview', async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

@@ -1,18 +1,20 @@
-const express = require('express');
-const { query, param, validationResult } = require('express-validator');
+import express, { Response, NextFunction } from 'express';
+import { query, param, validationResult } from 'express-validator';
+import { ExtendedRequest } from '../types';
+// Note: AuthorService still in JS, using require for now
 const AuthorService = require('../services/AuthorService');
 const { optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Validation middleware
-const validate = (req, res, next) => {
+const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       errors: errors.array()
-    });
+    }) as any;
   }
   next();
 };
@@ -24,14 +26,14 @@ router.get('/', [
   query('sort').optional().isIn(['relevance', 'name', 'name_desc', 'firstname', 'firstname_desc', 'books', 'books_asc', 'recent']),
   query('page').optional().isInt({ min: 0 }),
   query('limit').optional().isInt({ min: 1, max: 100 })
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const searchParams = {
-      query: req.query.q,
-      letter: req.query.letter,
-      sort: req.query.sort || 'relevance',
-      page: parseInt(req.query.page) || 0,
-      limit: parseInt(req.query.limit) || 50
+      query: req.query.q as string,
+      letter: req.query.letter as string,
+      sort: (req.query.sort as string) || 'relevance',
+      page: parseInt(req.query.page as string) || 0,
+      limit: parseInt(req.query.limit as string) || 50
     };
 
     const result = await AuthorService.searchAuthors(searchParams);
@@ -51,11 +53,11 @@ router.get('/letter/:letter', [
   param('letter').isString().isLength({ min: 1, max: 1 }).withMessage('Letter must be a single character'),
   query('page').optional().isInt({ min: 0 }),
   query('limit').optional().isInt({ min: 1, max: 100 })
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const letter = req.params.letter.toUpperCase();
-    const page = parseInt(req.query.page) || 0;
-    const limit = parseInt(req.query.limit) || 50;
+    const letter = req.params.letter!.toUpperCase();
+    const page = parseInt(req.query.page as string) || 0;
+    const limit = parseInt(req.query.limit as string) || 50;
     
     const result = await AuthorService.getAuthorsByLetter(letter, page, limit);
     
@@ -72,16 +74,17 @@ router.get('/letter/:letter', [
 // Get author by ID
 router.get('/:id', [
   param('id').isInt({ min: 1 }).withMessage('Author ID must be a positive integer')
-], validate, optionalAuth, async (req, res, next) => {
+], validate, optionalAuth, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const authorId = parseInt(req.params.id);
+    const authorId = parseInt(req.params.id!);
     const author = await AuthorService.getAuthorById(authorId);
     
     if (!author) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Author not found'
       });
+      return;
     }
 
     // Add user-specific data if authenticated
@@ -107,9 +110,9 @@ router.get('/:id', [
 // Get author aliases
 router.get('/:id/aliases', [
   param('id').isInt({ min: 1 }).withMessage('Author ID must be a positive integer')
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const authorId = parseInt(req.params.id);
+    const authorId = parseInt(req.params.id!);
     const aliases = await AuthorService.getAuthorAliases(authorId);
     
     res.json({
@@ -124,9 +127,9 @@ router.get('/:id/aliases', [
 // Get popular authors
 router.get('/popular/list', [
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100')
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit as string) || 20;
     const authors = await AuthorService.getPopularAuthors(limit);
     
     res.json({
@@ -139,7 +142,7 @@ router.get('/popular/list', [
 });
 
 // Get author statistics
-router.get('/stats/overview', async (req, res, next) => {
+router.get('/stats/overview', async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const stats = await AuthorService.getAuthorStatistics();
     
@@ -152,4 +155,4 @@ router.get('/stats/overview', async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;

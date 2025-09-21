@@ -1,23 +1,24 @@
-const express = require('express');
-const { query, param, validationResult } = require('express-validator');
-const { getRow, getRows } = require('../database/connection');
+import express, { Response, NextFunction } from 'express';
+import { query, param, validationResult } from 'express-validator';
+import { getRow, getRows } from '../database/connection';
+import { ExtendedRequest } from '../types';
 
 const router = express.Router();
 
 // Validation middleware
-const validate = (req, res, next) => {
+const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       errors: errors.array()
-    });
+    }) as any;
   }
   next();
 };
 
 // Get all genres
-router.get('/', async (req, res, next) => {
+router.get('/', async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const genres = await getRows(`
       SELECT DISTINCT genremeta as category, 
@@ -39,9 +40,9 @@ router.get('/', async (req, res, next) => {
 // Get genres by category
 router.get('/category/:category', [
   param('category').isString().trim().notEmpty().withMessage('Category is required')
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const category = req.params.category;
+    const category = req.params.category!;
     
     const genres = await getRows(`
       SELECT genreid, genrecode, genredesc, genremeta,
@@ -66,9 +67,9 @@ router.get('/category/:category', [
 // Get genre by code
 router.get('/:genreCode', [
   param('genreCode').isString().trim().notEmpty().withMessage('Genre code is required')
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const genreCode = req.params.genreCode;
+    const genreCode = req.params.genreCode!;
     
     const genre = await getRow(`
       SELECT genreid, genrecode, genredesc, genremeta
@@ -77,10 +78,11 @@ router.get('/:genreCode', [
     `, [genreCode]);
 
     if (!genre) {
-      return res.status(404).json({
+      res.status(404).json({
         success: false,
         error: 'Genre not found'
       });
+      return;
     }
 
     // Get book count for this genre
@@ -122,4 +124,4 @@ router.get('/stats/overview', async (req, res, next) => {
   }
 });
 
-module.exports = router;
+export default router;
