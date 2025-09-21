@@ -14,12 +14,19 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+# Install all dependencies (including dev dependencies for TypeScript compilation)
+RUN npm ci && npm cache clean --force
 
 # Copy source code
 COPY . .
+
+# Build TypeScript
+RUN npm run build
+
+# Remove dev dependencies after build
+RUN npm ci --only=production && npm cache clean --force
 
 # Create necessary directories
 RUN mkdir -p logs cache/authors cache/covers
