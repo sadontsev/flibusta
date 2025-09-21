@@ -4,7 +4,8 @@
   "description": "Modern Node.js backend for Flibusta library system",
   "main": "dist/app.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run copy-js",
+    "copy-js": "cp src/routes/*.js dist/routes/ 2>/dev/null || true; cp src/services/*.js dist/services/ 2>/dev/null || true",
     "start": "node dist/app.js",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "dev:watch": "nodemon --exec ts-node src/app.ts",

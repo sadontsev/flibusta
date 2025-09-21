@@ -1,23 +1,22 @@
-import express, { Response, NextFunction } from 'express';
-import { param, validationResult } from 'express-validator';
-import path from 'path';
-import fs from 'fs/promises';
-import AdmZip from 'adm-zip';
+const express = require('express');
+const { param, validationResult } = require('express-validator');
+const path = require('path');
+const fs = require('fs').promises;
+const AdmZip = require('adm-zip');
 // const sharp = require('sharp'); // Temporarily disabled for ARM64 compatibility
-import { getRow } from '../database/connection';
-import logger from '../utils/logger';
-import { ExtendedRequest } from '../types';
+const { getRow } = require('../database/connection');
+const logger = require('../utils/logger');
 
 const router = express.Router();
 
 // Validation middleware
-const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
+const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       errors: errors.array()
-    }) as any;
+    });
   }
   next();
 };
@@ -25,9 +24,9 @@ const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void
 // Serve book file
 router.get('/book/:bookId', [
   param('bookId').isInt({ min: 1 }).withMessage('Book ID must be a positive integer')
-], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
+], validate, async (req, res, next) => {
   try {
-    const bookId = parseInt(req.params.bookId!);
+    const bookId = parseInt(req.params.bookId);
 
     // Get book info
     const book = await getRow(`
@@ -42,11 +41,10 @@ router.get('/book/:bookId', [
     `, [bookId]);
 
     if (!book) {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
         error: 'Book not found'
       });
-      return;
     }
 
     console.log('Book info:', { bookId, title: book.title, filetype: book.filetype, filename: book.filename });
@@ -292,7 +290,7 @@ router.get('/cover/:bookId', [
 });
 
 // Helper function to get content type
-function getContentType(fileType: string): string {
+function getContentType(fileType) {
   const contentTypes = {
     'fb2': 'application/x-fictionbook+xml',
     'epub': 'application/epub+zip',
@@ -307,7 +305,7 @@ function getContentType(fileType: string): string {
     'djv': 'image/vnd.djvu'
   };
 
-  return (contentTypes as any)[fileType.toLowerCase()] || 'application/octet-stream';
+  return contentTypes[fileType.toLowerCase()] || 'application/octet-stream';
 }
 
-export default router;
+module.exports = router;
