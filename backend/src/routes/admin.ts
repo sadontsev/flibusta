@@ -3,6 +3,8 @@ import { requireAuth, requireRole, requireAdmin } from '../middleware/auth';
 import { query } from '../database/connection';
 import logger from '../utils/logger';
 import UpdateService from '../services/UpdateService';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
@@ -258,6 +260,86 @@ router.get('/users', requireAuth, requireAdmin, async (req, res) => {
         });
     } catch (error) {
         logger.error('Error getting users list:', error);
+        res.status(500).json({
+            success: false,
+            error: (error as Error).message
+        });
+    }
+});
+
+// Create new user (admin can create users)
+router.post('/users', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const { username, password, email, display_name, role = 'user' } = req.body;
+        
+        // Validate required fields
+        if (!username || !password) {
+            res.status(400).json({
+                success: false,
+                error: 'Username and password are required'
+            });
+            return;
+        }
+
+        if (username.length < 3) {
+            res.status(400).json({
+                success: false,
+                error: 'Username must be at least 3 characters'
+            });
+            return;
+        }
+
+        if (password.length < 6) {
+            res.status(400).json({
+                success: false,
+                error: 'Password must be at least 6 characters'
+            });
+            return;
+        }
+
+        // Check if user already exists
+        const existingUser = await query(`
+            SELECT user_uuid FROM users WHERE username = $1 OR ($2 IS NOT NULL AND email = $2)
+        `, [username, email || null]);
+
+        if (existingUser.rows.length > 0) {
+            res.status(400).json({
+                success: false,
+                error: 'User with this username or email already exists'
+            });
+            return;
+        }
+
+        // Hash password
+        const saltRounds = 12;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
+        const userUuid = uuidv4();
+
+        // Create user
+        await query(`
+            INSERT INTO users (user_uuid, username, email, password_hash, role, display_name, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [userUuid, username, email || null, passwordHash, role, display_name || null, true]);
+
+        // Get created user
+        const newUser = await query(`
+            SELECT user_uuid, username, email, role, is_active, display_name, created_at
+            FROM users WHERE user_uuid = $1
+        `, [userUuid]);
+
+        logger.info('New user created by admin', { 
+            username: username,
+            role: role,
+            createdBy: (req as any).user.username
+        });
+
+        res.status(201).json({
+            success: true,
+            data: newUser.rows[0],
+            message: 'User created successfully'
+        });
+    } catch (error) {
+        logger.error('Error creating user:', error);
         res.status(500).json({
             success: false,
             error: (error as Error).message
