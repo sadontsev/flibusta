@@ -93,8 +93,8 @@ class AuthorService {
         limit = this.authorsPerPage
       } = searchParams;
 
-      let conditions = ['1=1'];
-      let params = [];
+      const conditions = ['1=1'];
+      const params = [];
       let paramIndex = 1;
 
       // Enhanced search by name with better partial matching
@@ -250,7 +250,7 @@ class AuthorService {
       `, [`${letter}%`, limit, offset]);
 
       // Get book count for each author
-      for (let author of authors) {
+      for (const author of authors) {
         const bookCount = await getRow(`
           SELECT COUNT(*) as count
           FROM libavtor a

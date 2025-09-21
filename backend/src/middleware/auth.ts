@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { getRow, query } from '../database/connection';
 import logger from '../utils/logger';
 import { ExtendedRequest, User, RegisteredUser } from '../types';

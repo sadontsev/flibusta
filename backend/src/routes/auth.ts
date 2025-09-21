@@ -4,14 +4,8 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { getRow, query, getRows } from '../database/connection';
 import logger from '../utils/logger';
-import { requireAuth, requireSuperAdmin, requireAdmin, logActivity } from '../middleware/auth';
-import { 
-  createTypeSafeHandler
-} from '../middleware/validation';
-import { 
-  buildErrorResponse, 
-  buildSuccessResponse 
-} from '../types/api';
+import { requireAuth, requireSuperAdmin, requireAdmin } from '../middleware/auth';
+import { buildErrorResponse } from '../types/api';
 import { ExtendedRequest, AuthenticatedRequest } from '../types';
 
 const router = express.Router();
@@ -147,7 +141,6 @@ router.get('/me', requireAuth, async (req: ExtendedRequest, res: Response, next:
   } catch (error) {
     next(error);
     return;
-    next(error);
   }
 });
 
@@ -270,7 +263,7 @@ router.get('/users', requireAuth, requireAdmin, async (req: ExtendedRequest, res
     const offset = page * limit;
     
     let whereClause = '';
-    let params = [];
+    const params = [];
     
     if (search) {
       whereClause = 'WHERE username ILIKE $1 OR display_name ILIKE $1 OR email ILIKE $1';
@@ -476,7 +469,7 @@ router.get('/activity', requireAuth, requireAdmin, async (req: ExtendedRequest, 
     const offset = page * limit;
     
     let whereClause = '';
-    let params = [];
+    const params = [];
     
     if (user_uuid) {
       whereClause = 'WHERE ual.user_uuid = $1';

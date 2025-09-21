@@ -3,7 +3,7 @@
  * Provides comprehensive validation with TypeScript type safety
  */
 
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { validationResult, ValidationError as ExpressValidationError } from 'express-validator';
 import { ExtendedRequest } from '../types';
 import {
@@ -322,15 +322,15 @@ function isValidEmail(email: string): boolean {
 // Advanced Type-Safe Route Handler
 // =======================
 
-type AsyncRouteHandler<T = any> = (
+type AsyncRouteHandler = (
   req: ExtendedRequest,
   res: Response,
   next: NextFunction
 ) => Promise<Response | void>;
 
-export function createTypeSafeHandler<T = any>(
-  handler: AsyncRouteHandler<T>
-): AsyncRouteHandler<T> {
+export function createTypeSafeHandler(
+  handler: AsyncRouteHandler
+): AsyncRouteHandler {
   return async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<Response | void> => {
     try {
       return await handler(req, res, next);

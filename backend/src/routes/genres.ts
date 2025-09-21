@@ -1,5 +1,5 @@
 import express, { Response, NextFunction } from 'express';
-import { query, param, validationResult } from 'express-validator';
+import { param, validationResult } from 'express-validator';
 import { getRow, getRows } from '../database/connection';
 import { ExtendedRequest } from '../types';
 

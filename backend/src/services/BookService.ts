@@ -1,4 +1,4 @@
-import { getRow, getRows, query } from '../database/connection';
+import { getRow, getRows } from '../database/connection';
 import logger from '../utils/logger';
 
 interface Book {
@@ -152,8 +152,8 @@ class BookService {
         limit = this.recordsPerPage
       } = searchParams;
 
-      let conditions = ['b.deleted = $1'];
-      let params = ['0'];
+      const conditions = ['b.deleted = $1'];
+      const params = ['0'];
       let paramIndex = 2;
 
       // Enhanced search that can handle combined book name and author queries
@@ -412,7 +412,7 @@ class BookService {
       `, [limit]);
 
       // Get authors for each book
-      for (let book of books) {
+      for (const book of books) {
         const authors = await getRows(`
           SELECT a.avtorid, an.lastname, an.firstname, an.middlename, an.nickname
           FROM libavtor a
@@ -455,7 +455,7 @@ class BookService {
       `, [authorId, limit, offset]);
 
       // Get authors for each book
-      for (let book of books) {
+      for (const book of books) {
         const authors = await getRows(`
           SELECT a.avtorid, an.lastname, an.firstname, an.middlename, an.nickname
           FROM libavtor a
@@ -508,7 +508,7 @@ class BookService {
       `, [genreCode, limit, offset]);
 
       // Get authors for each book
-      for (let book of books) {
+      for (const book of books) {
         const authors = await getRows(`
           SELECT a.avtorid, an.lastname, an.firstname, an.middlename, an.nickname
           FROM libavtor a

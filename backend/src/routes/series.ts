@@ -30,8 +30,8 @@ router.get('/', [
     const page = parseInt((req.query.page as string) || '0');
     const limit = parseInt((req.query.limit as string) || '50');
 
-    let conditions = ['1=1'];
-    let params: any[] = [];
+    const conditions = ['1=1'];
+    const params: any[] = [];
     let paramIndex = 1;
 
     // Search by name
@@ -120,7 +120,7 @@ router.get('/:id', [
     `, [seriesId]);
 
     // Get authors for each book
-    for (let book of books) {
+    for (const book of books) {
       const authors = await getRows(`
         SELECT a.avtorid, a.lastname, a.firstname, a.middlename, a.nickname
         FROM libavtor a

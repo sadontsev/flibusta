@@ -1,6 +1,5 @@
 import express, { Response, NextFunction } from 'express';
-import { body, query, param, validationResult, ValidationError } from 'express-validator';
-import logger from '../utils/logger';
+import { query, param, validationResult } from 'express-validator';
 import { ExtendedRequest } from '../types';
 import BookService from '../services/BookService';
 // Note: Auth middleware is still in JS, using require for now

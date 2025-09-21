@@ -9,10 +9,7 @@ import logger from '../utils/logger';
 import { 
   createTypeSafeHandler
 } from '../middleware/validation';
-import { 
-  buildErrorResponse, 
-  buildSuccessResponse 
-} from '../types/api';
+import { buildErrorResponse } from '../types/api';
 import { ExtendedRequest } from '../types';
 
 const router = express.Router();

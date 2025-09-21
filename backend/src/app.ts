@@ -22,7 +22,7 @@ const AutomatedUpdateService = require('./services/AutomatedUpdateService');
 const MaintenanceScheduler = require('./scripts/MaintenanceScheduler');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Create the PostgreSQL session store
 const PostgreSQLStore = pgSession(session);

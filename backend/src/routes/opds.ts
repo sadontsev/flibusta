@@ -1,12 +1,8 @@
 import express, { Response, NextFunction } from 'express';
 import { query, param, validationResult } from 'express-validator';
-import { getRow, getRows } from '../database/connection';
+import { getRows } from '../database/connection';
 const xml2js = require('xml2js');
-import logger from '../utils/logger';
-import { 
-  buildErrorResponse, 
-  buildSuccessResponse 
-} from '../types/api';
+import { buildErrorResponse } from '../types/api';
 import { ExtendedRequest } from '../types';
 
 const router = express.Router();
@@ -172,7 +168,7 @@ router.get('/search', [
     const limit = parseInt(process.env.OPDS_FEED_COUNT || '100') || 100;
     const offset = pageNumber * limit;
 
-    let entries = [];
+    const entries = [];
 
     if (searchType === 'books' && q) {
       // Search books
@@ -184,7 +180,7 @@ router.get('/search', [
         LIMIT $2 OFFSET $3
       `, [`%${q}%`, limit, offset]);
 
-      for (let book of books) {
+      for (const book of books) {
         // Get authors
         const authors = await getRows(`
           SELECT a.avtorid, a.lastname, a.firstname, a.middlename, a.nickname
@@ -252,7 +248,7 @@ router.get('/search', [
         LIMIT $2 OFFSET $3
       `, [`%${q}%`, limit, offset]);
 
-      for (let author of authors) {
+      for (const author of authors) {
         entries.push({
           updated: now,
           id: `tag:author:${author.avtorid}`,
@@ -399,7 +395,7 @@ router.get('/genre/:category', [
 
     const entries = [];
 
-    for (let book of books) {
+    for (const book of books) {
       // Get authors
       const authors = await getRows(`
         SELECT a.avtorid, a.lastname, a.firstname, a.middlename, a.nickname

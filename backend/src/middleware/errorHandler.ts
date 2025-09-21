@@ -6,7 +6,7 @@ interface ErrorWithCode extends Error {
   statusCode?: number;
 }
 
-const errorHandler = (err: ErrorWithCode, req: Request, res: Response, next: NextFunction): void => {
+const errorHandler = (err: ErrorWithCode, req: Request, res: Response, _next: NextFunction): void => {
   let error: { message: string; statusCode: number } = { 
     message: err.message || 'Server Error',
     statusCode: err.statusCode || 500

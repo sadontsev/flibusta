@@ -3,15 +3,13 @@
  * Handles user favorites for books, authors, and series
  */
 
-import express, { Response, NextFunction } from 'express';
+import express, { Response } from 'express';
 import { body, param } from 'express-validator';
 import { query as dbQuery, getRow } from '../database/connection';
 import { requireAuth } from '../middleware/auth';
 import { 
   validate, 
   extractPaginationParams,
-  validateBookIdParam,
-  validateAuthorIdParam,
   createTypeSafeHandler
 } from '../middleware/validation';
 import { 
