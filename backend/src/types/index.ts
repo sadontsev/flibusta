@@ -75,6 +75,11 @@ export interface ExtendedRequest extends Request {
   session: Session & SessionData;
 }
 
+export interface AuthenticatedRequest extends Request {
+  user: RegisteredUser;
+  session: Session & SessionData;
+}
+
 // API Response Types
 export interface ApiResponse<T = any> {
   success: boolean;

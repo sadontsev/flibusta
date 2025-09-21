@@ -12,7 +12,7 @@ import {
   buildErrorResponse, 
   buildSuccessResponse 
 } from '../types/api';
-import { ExtendedRequest } from '../types';
+import { ExtendedRequest, AuthenticatedRequest } from '../types';
 
 const router = express.Router();
 
@@ -29,7 +29,7 @@ const validate = (req: ExtendedRequest, res: Response, next: NextFunction): Resp
 router.post('/login', [
   body('username').isString().trim().isLength({ min: 1, max: 50 }).withMessage('Username must be between 1 and 50 characters'),
   body('password').isString().isLength({ min: 1 }).withMessage('Password is required')
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
     const { username, password } = req.body;
     
@@ -86,7 +86,7 @@ router.post('/register', [
   body('email').optional().isEmail().withMessage('Invalid email format'),
   body('display_name').optional().isString().trim().isLength({ min: 1, max: 100 }).withMessage('Display name must be between 1 and 100 characters'),
   body('role').optional().isIn(['user', 'admin']).withMessage('Invalid role')
-], validate, requireSuperAdmin, async (req, res, next) => {
+], validate, requireSuperAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
     const { username, password, email, display_name, role = 'user' } = req.body;
     
@@ -119,25 +119,34 @@ router.post('/register', [
       FROM users WHERE user_uuid = $1
     `, [userUuid]);
 
-    logger.info('New user created', { username, role, createdBy: req.user ? req.user.username : 'unknown' });
+    logger.info('New user created', { 
+      username, 
+      role, 
+      createdBy: (req as AuthenticatedRequest).user.username 
+    });
 
     res.status(201).json({
       success: true,
       data: newUser
     });
+    return;
   } catch (error) {
     next(error);
+    return;
   }
 });
 
 // Get current user
-router.get('/me', requireAuth, async (req, res, next) => {
+router.get('/me', requireAuth, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
     res.json({
       success: true,
-      data: req.user
+      data: (req as AuthenticatedRequest).user
     });
+    return;
   } catch (error) {
+    next(error);
+    return;
     next(error);
   }
 });
@@ -164,14 +173,15 @@ router.post('/logout', (req, res) => {
 router.post('/change-password', [
   body('current_password').isString().isLength({ min: 1 }).withMessage('Current password is required'),
   body('new_password').isString().isLength({ min: 6 }).withMessage('New password must be at least 6 characters')
-], validate, requireAuth, async (req, res, next) => {
+], validate, requireAuth, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
+    const authReq = req as AuthenticatedRequest;
     const { current_password, new_password } = req.body;
     
     // Get current user with password
     const user = await getRow(`
       SELECT password_hash FROM users WHERE user_uuid = $1
-    `, [req.user.user_uuid]);
+    `, [authReq.user.user_uuid]);
 
     // Verify current password
     const isCurrentPasswordValid = await bcrypt.compare(current_password, user.password_hash);
@@ -189,16 +199,18 @@ router.post('/change-password', [
     // Update password
     await query(`
       UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE user_uuid = $2
-    `, [newPasswordHash, req.user.user_uuid]);
+    `, [newPasswordHash, authReq.user.user_uuid]);
 
-    logger.info('Password changed successfully', { username: req.user.username });
+    logger.info('Password changed successfully', { username: authReq.user.username });
 
     res.json({
       success: true,
       message: 'Password changed successfully'
     });
+    return;
   } catch (error) {
     next(error);
+    return;
   }
 });
 
@@ -206,15 +218,16 @@ router.post('/change-password', [
 router.put('/profile', [
   body('email').optional().isEmail().withMessage('Invalid email format'),
   body('display_name').optional().isString().trim().isLength({ min: 1, max: 100 }).withMessage('Display name must be between 1 and 100 characters')
-], validate, requireAuth, async (req, res, next) => {
+], validate, requireAuth, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
+    const authReq = req as AuthenticatedRequest;
     const { email, display_name } = req.body;
     
     // Check if email is already taken by another user
-    if (email && email !== req.user.email) {
+    if (email && email !== authReq.user.email) {
       const existingUser = await getRow(`
         SELECT user_uuid FROM users WHERE email = $1 AND user_uuid != $2
-      `, [email, req.user.user_uuid]);
+      `, [email, authReq.user.user_uuid]);
 
       if (existingUser) {
         return res.status(400).json({
@@ -227,29 +240,33 @@ router.put('/profile', [
     // Update user
     await query(`
       UPDATE users SET email = $1, display_name = $2, updated_at = CURRENT_TIMESTAMP WHERE user_uuid = $3
-    `, [email || req.user.email, display_name || req.user.display_name, req.user.user_uuid]);
+    `, [email || authReq.user.email, display_name || authReq.user.display_name, authReq.user.user_uuid]);
 
     // Get updated user
     const updatedUser = await getRow(`
       SELECT user_uuid, username, email, role, is_active, display_name, avatar_url
       FROM users WHERE user_uuid = $1
-    `, [req.user.user_uuid]);
+    `, [authReq.user.user_uuid]);
 
-    logger.info('Profile updated', { username: req.user.username });
+    logger.info('Profile updated', { username: authReq.user.username });
 
     res.json({
       success: true,
       data: updatedUser
     });
+    return;
   } catch (error) {
     next(error);
+    return;
   }
 });
 
 // Get all users (admin only)
-router.get('/users', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/users', requireAuth, requireAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
-    const { page = 0, limit = 20, search = '' } = req.query;
+    const page = parseInt(String(req.query.page || '0'));
+    const limit = parseInt(String(req.query.limit || '20'));
+    const search = String(req.query.search || '');
     const offset = page * limit;
     
     let whereClause = '';
@@ -280,8 +297,8 @@ router.get('/users', requireAuth, requireAdmin, async (req, res, next) => {
       data: {
         users,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
+          page,
+          limit,
           total,
           pages: Math.ceil(total / limit)
         }
@@ -298,7 +315,7 @@ router.put('/users/:userId', [
   body('display_name').optional().isString().trim().isLength({ min: 1, max: 100 }).withMessage('Display name must be between 1 and 100 characters'),
   body('role').optional().isIn(['user', 'admin']).withMessage('Invalid role'),
   body('is_active').optional().isBoolean().withMessage('is_active must be a boolean')
-], validate, requireAuth, requireAdmin, async (req, res, next) => {
+], validate, requireAuth, requireAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params;
     const { email, display_name, role, is_active } = req.body;
@@ -373,7 +390,7 @@ router.put('/users/:userId', [
     `, [userId]);
 
     logger.info('User updated', { 
-      updatedBy: req.user.username, 
+      updatedBy: (req as AuthenticatedRequest).user.username, 
       updatedUser: updatedUser.username,
       changes: { email, display_name, role, is_active }
     });
@@ -382,13 +399,15 @@ router.put('/users/:userId', [
       success: true,
       data: updatedUser
     });
+    return;
   } catch (error) {
     next(error);
+    return;
   }
 });
 
 // Delete user (admin only)
-router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res, next) => {
+router.delete('/users/:userId', requireAuth, requireAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
     const { userId } = req.params;
     
@@ -433,7 +452,7 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res, next
     `, [userId]);
 
     logger.info('User deleted', { 
-      deletedBy: req.user.username, 
+      deletedBy: (req as AuthenticatedRequest).user.username, 
       deletedUser: existingUser.username 
     });
 
@@ -441,15 +460,19 @@ router.delete('/users/:userId', requireAuth, requireAdmin, async (req, res, next
       success: true,
       message: 'User deleted successfully'
     });
+    return;
   } catch (error) {
     next(error);
+    return;
   }
 });
 
 // Get user activity log (admin only)
-router.get('/activity', requireAuth, requireAdmin, async (req, res, next) => {
+router.get('/activity', requireAuth, requireAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
-    const { page = 0, limit = 50, user_uuid } = req.query;
+    const page = parseInt(String(req.query.page || '0'));
+    const limit = parseInt(String(req.query.limit || '50'));
+    const user_uuid = String(req.query.user_uuid || '');
     const offset = page * limit;
     
     let whereClause = '';
@@ -489,15 +512,17 @@ router.get('/activity', requireAuth, requireAdmin, async (req, res, next) => {
       data: {
         activity,
         pagination: {
-          page: parseInt(page),
-          limit: parseInt(limit),
+          page,
+          limit,
           total,
           pages: Math.ceil(total / limit)
         }
       }
     });
+    return;
   } catch (error) {
     next(error);
+    return;
   }
 });
 

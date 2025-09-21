@@ -162,9 +162,11 @@ router.get('/search', [
   query('q').optional().isString().trim(),
   query('searchType').optional().isIn(['books', 'authors']),
   query('pageNumber').optional().isInt({ min: 0 })
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
-    const { q = '', searchType = 'books', pageNumber = 0 } = req.query;
+    const q = String(req.query.q || '');
+    const searchType = String(req.query.searchType || 'books');
+    const pageNumber = parseInt(String(req.query.pageNumber || '0'));
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const now = new Date().toISOString();
     const limit = parseInt(process.env.OPDS_FEED_COUNT || '100') || 100;
@@ -378,7 +380,7 @@ router.get('/genres', async (req, res, next) => {
 // OPDS genre books
 router.get('/genre/:category', [
   param('category').isString().trim().notEmpty()
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
   try {
     const category = req.params.category;
     const baseUrl = `${req.protocol}://${req.get('host')}`;
