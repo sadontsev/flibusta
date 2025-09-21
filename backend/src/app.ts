@@ -13,7 +13,7 @@ import genresRoutes from './routes/genres';
 import seriesRoutes from './routes/series';
 import { initializeSession, addUserToLocals } from './middleware/sessionMiddleware';
 
-// Import JavaScript routes (still to be converted)
+// Import JavaScript routes (complex business logic, to be converted later)
 const filesRoutes = require('./routes/files');
 const authRoutes = require('./routes/auth');
 const adminRoutes = require('./routes/admin');

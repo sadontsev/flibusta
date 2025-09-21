@@ -1,18 +1,21 @@
-const express = require('express');
-const router = express.Router();
+import express, { Response, NextFunction } from 'express';
+import logger from '../utils/logger';
+import { ExtendedRequest } from '../types';
+// Note: These services are still in JS, using require for now
 const UpdateService = require('../services/UpdateService');
 const { requireAuth, requireRole, requireAdmin } = require('../middleware/auth');
 const DatabaseManager = require('../scripts/DatabaseManager');
 const MaintenanceScheduler = require('../scripts/MaintenanceScheduler');
-const logger = require('../utils/logger');
+const AutomatedUpdateService = require('../services/AutomatedUpdateService');
+
+const router = express.Router();
 
 const updateService = new UpdateService();
-const AutomatedUpdateService = require('../services/AutomatedUpdateService');
 const automatedUpdateService = new AutomatedUpdateService();
 const dbManager = new DatabaseManager();
 
 // Global maintenance scheduler instance
-let maintenanceScheduler = null;
+let maintenanceScheduler: any = null;
 
 // Get admin dashboard data
 router.get('/dashboard', requireAuth, requireAdmin, async (req, res) => {
@@ -742,4 +745,4 @@ router.post('/full-setup', requireAuth, requireAdmin, async (req, res) => {
     }
 });
 
-module.exports = router;
+export default router;
