@@ -2,9 +2,9 @@ import express, { Response, NextFunction } from 'express';
 import { body, query, param, validationResult, ValidationError } from 'express-validator';
 import logger from '../utils/logger';
 import { ExtendedRequest } from '../types';
-// Note: These are still in JS, using require for now
+import BookService from '../services/BookService';
+// Note: Auth middleware is still in JS, using require for now
 const { optionalAuth } = require('../middleware/auth');
-const BookService = require('../services/BookService');
 
 const router = express.Router();
 

@@ -1,21 +1,23 @@
-const express = require('express');
-const { body, validationResult } = require('express-validator');
-const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
-const { getRow, query, getRows } = require('../database/connection');
+import express, { Response, NextFunction } from 'express';
+import { body, validationResult } from 'express-validator';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
+import { getRow, query, getRows } from '../database/connection';
+import logger from '../utils/logger';
+import { ExtendedRequest } from '../types';
+// Note: Auth middleware is still in JS, using require for now
 const { requireAuth, requireSuperAdmin, requireAdmin, logActivity } = require('../middleware/auth');
-const logger = require('../utils/logger');
 
 const router = express.Router();
 
 // Validation middleware
-const validate = (req, res, next) => {
+const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       errors: errors.array()
-    });
+    }) as any;
   }
   next();
 };
@@ -24,7 +26,7 @@ const validate = (req, res, next) => {
 router.post('/login', [
   body('username').isString().trim().isLength({ min: 1, max: 50 }).withMessage('Username must be between 1 and 50 characters'),
   body('password').isString().isLength({ min: 1 }).withMessage('Password is required')
-], validate, async (req, res, next) => {
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { username, password } = req.body;
     
@@ -35,19 +37,21 @@ router.post('/login', [
     `, [username]);
 
     if (!user || !user.is_active) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Invalid credentials'
       });
+      return;
     }
 
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password_hash);
     if (!isPasswordValid) {
-      return res.status(401).json({
+      res.status(401).json({
         success: false,
         error: 'Invalid credentials'
       });
+      return;
     }
 
     // Update last login
@@ -79,7 +83,7 @@ router.post('/register', [
   body('email').optional().isEmail().withMessage('Invalid email format'),
   body('display_name').optional().isString().trim().isLength({ min: 1, max: 100 }).withMessage('Display name must be between 1 and 100 characters'),
   body('role').optional().isIn(['user', 'admin']).withMessage('Invalid role')
-], validate, requireSuperAdmin, async (req, res, next) => {
+], validate, requireSuperAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { username, password, email, display_name, role = 'user' } = req.body;
     

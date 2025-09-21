@@ -1,12 +1,49 @@
-const { getRow, getRows } = require('../database/connection');
-const logger = require('../utils/logger');
+import { getRow, getRows } from '../database/connection';
+import logger from '../utils/logger';
+
+interface Author {
+  avtorid: number;
+  lastname: string;
+  firstname: string;
+  middlename?: string;
+  nickname?: string;
+  photo_file?: string;
+  annotation?: {
+    title: string;
+    body: string;
+  };
+  bookCount?: number;
+  isFavorite?: boolean;
+}
+
+interface AuthorSearchParams {
+  query?: string;
+  letter?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}
+
+interface AuthorSearchResult {
+  authors: Author[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+    hasNext?: boolean;
+    hasPrev?: boolean;
+  };
+}
 
 class AuthorService {
+  private authorsPerPage: number;
+
   constructor() {
-    this.authorsPerPage = parseInt(process.env.AUTHORS_PER_PAGE) || 50;
+    this.authorsPerPage = parseInt(process.env.AUTHORS_PER_PAGE || '50');
   }
 
-  async getAuthorById(authorId) {
+  async getAuthorById(authorId: number): Promise<Author | null> {
     try {
       const author = await getRow(`
         SELECT a.*, ap.file as photo_file
@@ -41,12 +78,12 @@ class AuthorService {
         bookCount: parseInt(bookCount.count)
       };
     } catch (error) {
-      logger.error('Error getting author by ID', { authorId, error: error.message });
+      logger.error('Error getting author by ID', { authorId, error: (error as Error).message });
       throw error;
     }
   }
 
-  async searchAuthors(searchParams) {
+  async searchAuthors(searchParams: AuthorSearchParams): Promise<AuthorSearchResult> {
     try {
       const {
         query = '',
@@ -87,7 +124,7 @@ class AuthorService {
 
       // Build ORDER BY clause based on sort parameter
       let orderBy = 'a.lastname ASC, a.firstname ASC'; // default
-      let orderByParams = [];
+      let orderByParams: any[] = [];
       
       switch (sort) {
         case 'relevance':
@@ -183,12 +220,12 @@ class AuthorService {
         }
       };
     } catch (error) {
-      logger.error('Error searching authors', { searchParams, error: error.message });
+      logger.error('Error searching authors', { searchParams, error: (error as Error).message });
       throw error;
     }
   }
 
-  async getAuthorsByLetter(letter, page = 0, limit = this.authorsPerPage) {
+  async getAuthorsByLetter(letter: string, page: number = 0, limit: number = this.authorsPerPage): Promise<AuthorSearchResult> {
     try {
       const offset = page * limit;
 
@@ -234,12 +271,12 @@ class AuthorService {
         }
       };
     } catch (error) {
-      logger.error('Error getting authors by letter', { letter, error: error.message });
+      logger.error('Error getting authors by letter', { letter, error: (error as Error).message });
       throw error;
     }
   }
 
-  async getAuthorStatistics() {
+  async getAuthorStatistics(): Promise<any> {
     try {
       const stats = await getRow(`
         SELECT 
@@ -251,12 +288,12 @@ class AuthorService {
 
       return stats;
     } catch (error) {
-      logger.error('Error getting author statistics', { error: error.message });
+      logger.error('Error getting author statistics', { error: (error as Error).message });
       throw error;
     }
   }
 
-  async getPopularAuthors(limit = 20) {
+  async getPopularAuthors(limit: number = 20): Promise<Author[]> {
     try {
       const authors = await getRows(`
         SELECT a.avtorid, a.lastname, a.firstname, a.middlename, a.nickname,
@@ -272,12 +309,12 @@ class AuthorService {
 
       return authors;
     } catch (error) {
-      logger.error('Error getting popular authors', { error: error.message });
+      logger.error('Error getting popular authors', { error: (error as Error).message });
       throw error;
     }
   }
 
-  async getAuthorAliases(authorId) {
+  async getAuthorAliases(authorId: number): Promise<any[]> {
     try {
       const aliases = await getRows(`
         SELECT a.aliaseid, a.badid, a.goodid,
@@ -291,10 +328,10 @@ class AuthorService {
 
       return aliases;
     } catch (error) {
-      logger.error('Error getting author aliases', { authorId, error: error.message });
+      logger.error('Error getting author aliases', { authorId, error: (error as Error).message });
       throw error;
     }
   }
 }
 
-module.exports = new AuthorService();
+export default new AuthorService();

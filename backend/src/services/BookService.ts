@@ -1,12 +1,83 @@
-const { getRow, getRows, query } = require('../database/connection');
-const logger = require('../utils/logger');
+import { getRow, getRows, query } from '../database/connection';
+import logger from '../utils/logger';
+
+interface Book {
+  bookid: number;
+  title: string;
+  filetype: string;
+  annotation?: string;
+  authors?: Author[];
+  genres?: Genre[];
+  series?: Series[];
+  reviews?: Review[];
+  isFavorite?: boolean;
+  readingProgress?: number;
+}
+
+interface Author {
+  avtorid: number;
+  lastname: string;
+  firstname: string;
+  middlename?: string;
+  nickname?: string;
+  pos: number;
+}
+
+interface Genre {
+  genreid: number;
+  genrecode: string;
+  genredesc: string;
+  genremeta: string;
+}
+
+interface Series {
+  seqid: number;
+  seqname: string;
+  seqnumb?: number;
+  level?: number;
+  type?: string;
+}
+
+interface Review {
+  id: number;
+  rating: number;
+  review_text?: string;
+  user_id: string;
+  created_at: Date;
+}
+
+interface SearchParams {
+  query?: string;
+  author?: string;
+  genre?: string;
+  series?: string;
+  year?: string;
+  language?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}
+
+interface SearchResult {
+  books: Book[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+    hasNext?: boolean;
+    hasPrev?: boolean;
+  };
+}
 
 class BookService {
+  private recordsPerPage: number;
+
   constructor() {
-    this.recordsPerPage = parseInt(process.env.RECORDS_PER_PAGE) || 10;
+    this.recordsPerPage = parseInt(process.env.RECORDS_PER_PAGE || '10');
   }
 
-  async getBookById(bookId) {
+  async getBookById(bookId: number): Promise<Book | null> {
     try {
       const book = await getRow(`
         SELECT b.*,
@@ -62,12 +133,12 @@ class BookService {
         reviews
       };
     } catch (error) {
-      logger.error('Error getting book by ID', { bookId, error: error.message });
+      logger.error('Error getting book by ID', { bookId, error: (error as Error).message });
       throw error;
     }
   }
 
-  async searchBooks(searchParams) {
+  async searchBooks(searchParams: SearchParams): Promise<SearchResult> {
     try {
       const {
         query = '',
@@ -92,8 +163,8 @@ class BookService {
         
         if (queryParts.length > 1) {
           // Query contains both book title and author
-          const bookTitle = queryParts[0].trim();
-          const authorName = queryParts[1].trim();
+          const bookTitle = queryParts[0]?.trim();
+          const authorName = queryParts[1]?.trim();
           
           if (bookTitle) {
             conditions.push(`b.title ILIKE $${paramIndex}`);
@@ -197,7 +268,7 @@ class BookService {
 
       // Build ORDER BY clause based on sort parameter
       let orderBy = 'b.bookid DESC'; // default
-      let orderByParams = [];
+      let orderByParams: any[] = [];
       
       switch (sort) {
         case 'relevance':
@@ -325,12 +396,12 @@ class BookService {
         }
       };
     } catch (error) {
-      logger.error('Error searching books', { searchParams, error: error.message });
+      logger.error('Error searching books', { searchParams, error: (error as Error).message });
       throw error;
     }
   }
 
-  async getRecentBooks(limit = 20) {
+  async getRecentBooks(limit: number = 20): Promise<Book[]> {
     try {
       const books = await getRows(`
         SELECT b.bookid, b.title, b.year, b.lang, b.filetype, b.filesize, b.time
@@ -354,12 +425,12 @@ class BookService {
 
       return books;
     } catch (error) {
-      logger.error('Error getting recent books', { error: error.message });
+      logger.error('Error getting recent books', { error: (error as Error).message });
       throw error;
     }
   }
 
-  async getBooksByAuthor(authorId, page = 0, limit = this.recordsPerPage) {
+  async getBooksByAuthor(authorId: number, page: number = 0, limit: number = this.recordsPerPage): Promise<SearchResult> {
     try {
       const offset = page * limit;
 
@@ -405,12 +476,12 @@ class BookService {
         }
       };
     } catch (error) {
-      logger.error('Error getting books by author', { authorId, error: error.message });
+      logger.error('Error getting books by author', { authorId, error: (error as Error).message });
       throw error;
     }
   }
 
-  async getBooksByGenre(genreCode, page = 0, limit = this.recordsPerPage) {
+  async getBooksByGenre(genreCode: string, page: number = 0, limit: number = this.recordsPerPage): Promise<SearchResult> {
     try {
       const offset = page * limit;
 
@@ -458,12 +529,12 @@ class BookService {
         }
       };
     } catch (error) {
-      logger.error('Error getting books by genre', { genreCode, error: error.message });
+      logger.error('Error getting books by genre', { genreCode, error: (error as Error).message });
       throw error;
     }
   }
 
-  async getBookFileInfo(bookId) {
+  async getBookFileInfo(bookId: number): Promise<any> {
     try {
       const fileInfo = await getRow(`
         SELECT filename, start_id, end_id, usr
@@ -473,10 +544,10 @@ class BookService {
 
       return fileInfo;
     } catch (error) {
-      logger.error('Error getting book file info', { bookId, error: error.message });
+      logger.error('Error getting book file info', { bookId, error: (error as Error).message });
       throw error;
     }
   }
 }
 
-module.exports = new BookService();
+export default new BookService();

@@ -1,8 +1,8 @@
 import express, { Response, NextFunction } from 'express';
 import { query, param, validationResult } from 'express-validator';
 import { ExtendedRequest } from '../types';
-// Note: AuthorService still in JS, using require for now
-const AuthorService = require('../services/AuthorService');
+import AuthorService from '../services/AuthorService';
+// Note: Auth middleware is still in JS, using require for now
 const { optionalAuth } = require('../middleware/auth');
 
 const router = express.Router();
