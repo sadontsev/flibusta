@@ -1,8 +1,16 @@
-const logger = require('../utils/logger');
+import { Request, Response, NextFunction } from 'express';
+import logger from '../utils/logger';
 
-const errorHandler = (err, req, res, next) => {
-  let error = { ...err };
-  error.message = err.message;
+interface ErrorWithCode extends Error {
+  code?: string | number;
+  statusCode?: number;
+}
+
+const errorHandler = (err: ErrorWithCode, req: Request, res: Response, next: NextFunction): void => {
+  let error: { message: string; statusCode: number } = { 
+    message: err.message || 'Server Error',
+    statusCode: err.statusCode || 500
+  };
 
   // Log error
   logger.error('Error occurred', {
@@ -28,7 +36,7 @@ const errorHandler = (err, req, res, next) => {
 
   // Mongoose validation error
   if (err.name === 'ValidationError') {
-    const message = Object.values(err.errors).map(val => val.message).join(', ');
+    const message = Object.values((err as any).errors).map((val: any) => val.message).join(', ');
     error = { message, statusCode: 400 };
   }
 
@@ -77,4 +85,4 @@ const errorHandler = (err, req, res, next) => {
   });
 };
 
-module.exports = errorHandler;
+export default errorHandler;

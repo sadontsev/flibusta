@@ -5,19 +5,18 @@ import { v4 as uuidv4 } from 'uuid';
 import { getRow, query, getRows } from '../database/connection';
 import logger from '../utils/logger';
 import { ExtendedRequest } from '../types';
-// Note: Auth middleware is still in JS, using require for now
-const { requireAuth, requireSuperAdmin, requireAdmin, logActivity } = require('../middleware/auth');
+import { requireAuth, requireSuperAdmin, requireAdmin, logActivity } from '../middleware/auth';
 
 const router = express.Router();
 
 // Validation middleware
-const validate = (req: ExtendedRequest, res: Response, next: NextFunction): void => {
+const validate = (req: ExtendedRequest, res: Response, next: NextFunction): Response | void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       errors: errors.array()
-    }) as any;
+    });
   }
   next();
 };
@@ -83,7 +82,7 @@ router.post('/register', [
   body('email').optional().isEmail().withMessage('Invalid email format'),
   body('display_name').optional().isString().trim().isLength({ min: 1, max: 100 }).withMessage('Display name must be between 1 and 100 characters'),
   body('role').optional().isIn(['user', 'admin']).withMessage('Invalid role')
-], validate, requireSuperAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
+], validate, requireSuperAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<Response | void> => {
   try {
     const { username, password, email, display_name, role = 'user' } = req.body;
     
@@ -116,7 +115,11 @@ router.post('/register', [
       FROM users WHERE user_uuid = $1
     `, [userUuid]);
 
-    logger.info('New user created', { username, role, createdBy: req.user.username });
+    logger.info('New user created', { 
+      username, 
+      role, 
+      createdBy: req.user && req.user.type === 'registered' ? req.user.username : 'unknown' 
+    });
 
     res.status(201).json({
       success: true,
@@ -128,7 +131,7 @@ router.post('/register', [
 });
 
 // Get current user
-router.get('/me', requireAuth, async (req, res, next) => {
+router.get('/me', requireAuth, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     res.json({
       success: true,
@@ -140,13 +143,14 @@ router.get('/me', requireAuth, async (req, res, next) => {
 });
 
 // Logout user
-router.post('/logout', (req, res) => {
+router.post('/logout', (req: ExtendedRequest, res: Response): void => {
   req.session.destroy((err) => {
     if (err) {
-      return res.status(500).json({
+      res.status(500).json({
         success: false,
         error: 'Error logging out'
       });
+      return;
     }
 
     res.json({

@@ -1,9 +1,25 @@
-const jwt = require('jsonwebtoken');
-const { getRow } = require('../database/connection');
-const logger = require('../utils/logger');
+import { Request, Response, NextFunction } from 'express';
+import { getRow, query } from '../database/connection';
+import logger from '../utils/logger';
+import { ExtendedRequest, User, RegisteredUser } from '../types';
+
+// Interface for user activity logging
+interface ActivityData {
+  user_uuid: string;
+  action: string;
+  details: {
+    method: string;
+    path: string;
+    statusCode: number;
+    userAgent?: string | undefined;
+    ipAddress?: string | undefined;
+  };
+  ip_address?: string | undefined;
+  user_agent?: string | undefined;
+}
 
 // Middleware to require authentication
-const requireAuth = async (req, res, next) => {
+const requireAuth = async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<Response | void> => {
   try {
     if (!req.session.user_uuid) {
       // Check if this is an API request
@@ -23,7 +39,7 @@ const requireAuth = async (req, res, next) => {
     const user = await getRow(`
       SELECT user_uuid, username, email, role, is_active, display_name, avatar_url
       FROM users WHERE user_uuid = $1
-    `, [req.session.user_uuid]);
+    `, [req.session.user_uuid]) as User | null;
 
     if (!user || !user.is_active) {
       if (req.path.startsWith('/api/')) {
@@ -37,7 +53,7 @@ const requireAuth = async (req, res, next) => {
       }
     }
 
-    req.user = user;
+    req.user = { ...user, type: 'registered' } as RegisteredUser;
     next();
   } catch (error) {
     logger.error('Auth middleware error:', error);
@@ -54,16 +70,16 @@ const requireAuth = async (req, res, next) => {
 };
 
 // Middleware for optional authentication (for backward compatibility)
-const optionalAuth = async (req, res, next) => {
+const optionalAuth = async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     if (req.session.user_uuid) {
       const user = await getRow(`
         SELECT user_uuid, username, email, role, is_active, display_name, avatar_url
         FROM users WHERE user_uuid = $1
-      `, [req.session.user_uuid]);
+      `, [req.session.user_uuid]) as User | null;
 
       if (user && user.is_active) {
-        req.user = user;
+        req.user = { ...user, type: 'registered' } as RegisteredUser;
       }
     }
     next();
@@ -74,9 +90,9 @@ const optionalAuth = async (req, res, next) => {
 };
 
 // Middleware to require specific role
-const requireRole = (roles) => {
-  return (req, res, next) => {
-    if (!req.user) {
+const requireRole = (roles: string | string[]) => {
+  return (req: ExtendedRequest, res: Response, next: NextFunction): Response | void => {
+    if (!req.user || req.user.type !== 'registered') {
       if (req.path.startsWith('/api/')) {
         return res.status(401).json({
           success: false,
@@ -114,31 +130,31 @@ const requireSuperAdmin = requireRole('superadmin');
 const requireAdmin = requireRole(['admin', 'superadmin']);
 
 // Log user activity
-const logActivity = (action) => {
-  return async (req, res, next) => {
+const logActivity = (action: string) => {
+  return async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
     // Store original send method
     const originalSend = res.send;
     
     // Override send method to log activity
-    res.send = function(data) {
+    res.send = function(data: any) {
       // Call original send first
       const result = originalSend.call(this, data);
       
       // Log activity asynchronously after response is sent
-      if (req.user) {
+      if (req.user && req.user.type === 'registered') {
         setImmediate(() => {
-          const activityData = {
-            user_uuid: req.user.user_uuid,
+          const activityData: ActivityData = {
+            user_uuid: req.user!.user_uuid,
             action: action,
             details: {
               method: req.method,
               path: req.path,
               statusCode: res.statusCode,
-              userAgent: req.get('User-Agent'),
-              ipAddress: req.ip || req.connection.remoteAddress
+              userAgent: req.get('User-Agent') || undefined,
+              ipAddress: req.ip || req.connection?.remoteAddress || undefined
             },
-            ip_address: req.ip || req.connection.remoteAddress,
-            user_agent: req.get('User-Agent')
+            ip_address: req.ip || req.connection?.remoteAddress || undefined,
+            user_agent: req.get('User-Agent') || undefined
           };
 
           logUserActivity(activityData).catch(err => {
@@ -154,9 +170,8 @@ const logActivity = (action) => {
   };
 };
 
-async function logUserActivity(activityData) {
+async function logUserActivity(activityData: ActivityData): Promise<void> {
   try {
-    const { query } = require('../database/connection');
     await query(`
       INSERT INTO user_activity_log (user_uuid, action, details, ip_address, user_agent)
       VALUES ($1, $2, $3, $4, $5)
@@ -172,7 +187,7 @@ async function logUserActivity(activityData) {
   }
 }
 
-module.exports = {
+export {
   requireAuth,
   optionalAuth,
   requireRole,
