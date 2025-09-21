@@ -11,6 +11,7 @@ import booksRoutes from './routes/books';
 import authorsRoutes from './routes/authors';
 import genresRoutes from './routes/genres';
 import seriesRoutes from './routes/series';
+import favoritesRoutes from './routes/favorites';
 import { initializeSession, addUserToLocals } from './middleware/sessionMiddleware';
 
 // Import JavaScript routes (complex business logic, to be converted later)
@@ -75,6 +76,7 @@ app.use('/api/books', booksRoutes);
 app.use('/api/authors', authorsRoutes);
 app.use('/api/genres', genresRoutes);
 app.use('/api/series', seriesRoutes);
+app.use('/api/favorites', favoritesRoutes);
 app.use('/api/files', filesRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
