@@ -1,16 +1,15 @@
-import express, { Response, NextFunction } from 'express';
-import { body, validationResult } from 'express-validator';
-import bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
-import { getRow, query, getRows } from '../database/connection';
-import logger from '../utils/logger';
-import { ExtendedRequest } from '../types';
-import { requireAuth, requireSuperAdmin, requireAdmin, logActivity } from '../middleware/auth';
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const bcrypt = require('bcryptjs');
+const { v4: uuidv4 } = require('uuid');
+const { getRow, query, getRows } = require('../database/connection');
+const logger = require('../utils/logger');
+const { requireAuth, requireSuperAdmin, requireAdmin, logActivity } = require('../middleware/auth');
 
 const router = express.Router();
 
 // Validation middleware
-const validate = (req: ExtendedRequest, res: Response, next: NextFunction): Response | void => {
+const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
@@ -25,7 +24,7 @@ const validate = (req: ExtendedRequest, res: Response, next: NextFunction): Resp
 router.post('/login', [
   body('username').isString().trim().isLength({ min: 1, max: 50 }).withMessage('Username must be between 1 and 50 characters'),
   body('password').isString().isLength({ min: 1 }).withMessage('Password is required')
-], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
+], validate, async (req, res, next) => {
   try {
     const { username, password } = req.body;
     
@@ -82,7 +81,7 @@ router.post('/register', [
   body('email').optional().isEmail().withMessage('Invalid email format'),
   body('display_name').optional().isString().trim().isLength({ min: 1, max: 100 }).withMessage('Display name must be between 1 and 100 characters'),
   body('role').optional().isIn(['user', 'admin']).withMessage('Invalid role')
-], validate, requireSuperAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<Response | void> => {
+], validate, requireSuperAdmin, async (req, res, next) => {
   try {
     const { username, password, email, display_name, role = 'user' } = req.body;
     
@@ -115,11 +114,7 @@ router.post('/register', [
       FROM users WHERE user_uuid = $1
     `, [userUuid]);
 
-    logger.info('New user created', { 
-      username, 
-      role, 
-      createdBy: req.user && req.user.type === 'registered' ? req.user.username : 'unknown' 
-    });
+    logger.info('New user created', { username, role, createdBy: req.user ? req.user.username : 'unknown' });
 
     res.status(201).json({
       success: true,
@@ -131,7 +126,7 @@ router.post('/register', [
 });
 
 // Get current user
-router.get('/me', requireAuth, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
+router.get('/me', requireAuth, async (req, res, next) => {
   try {
     res.json({
       success: true,
@@ -143,7 +138,7 @@ router.get('/me', requireAuth, async (req: ExtendedRequest, res: Response, next:
 });
 
 // Logout user
-router.post('/logout', (req: ExtendedRequest, res: Response): void => {
+router.post('/logout', (req, res) => {
   req.session.destroy((err) => {
     if (err) {
       res.status(500).json({

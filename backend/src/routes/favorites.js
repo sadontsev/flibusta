@@ -1,13 +1,14 @@
-const express = require('express');
-const { body, param, validationResult } = require('express-validator');
-const { getRow, getRows, query } = require('../database/connection');
-const { requireAuth } = require('../middleware/auth');
-const logger = require('../utils/logger');
+import express, { Response, NextFunction } from 'express';
+import { body, param, validationResult } from 'express-validator';
+import { getRow, getRows, query } from '../database/connection';
+import { requireAuth } from '../middleware/auth';
+import logger from '../utils/logger';
+import { ExtendedRequest } from '../types';
 
 const router = express.Router();
 
 // Validation middleware
-const validate = (req, res, next) => {
+const validate = (req: ExtendedRequest, res: Response, next: NextFunction): Response | void => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
@@ -19,8 +20,16 @@ const validate = (req, res, next) => {
 };
 
 // Get user's favorites
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requireAuth, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    if (!req.user || req.user.type !== 'registered') {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required'
+      });
+      return;
+    }
+
     const userUuid = req.user.user_uuid;
 
     // Get favorite books
