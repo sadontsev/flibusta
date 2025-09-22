@@ -15,11 +15,12 @@ import favoritesRoutes from './routes/favorites';
 import authRoutes from './routes/auth';          // Now TypeScript
 import filesRoutes from './routes/files';        // Now TypeScript
 import { initializeSession, addUserToLocals } from './middleware/sessionMiddleware';
+import initSuperadmin from './database/init-superadmin';
 
-// Import JavaScript routes (to be converted later)
-const adminRoutes = require('./routes/admin');   // Complex admin routes - JS for now
-const AutomatedUpdateService = require('./services/AutomatedUpdateService');
-const MaintenanceScheduler = require('./scripts/MaintenanceScheduler');
+// Import remaining TypeScript modules
+import adminRoutes from './routes/admin';
+import AutomatedUpdateService from './services/AutomatedUpdateService';
+import MaintenanceScheduler from './scripts/MaintenanceScheduler';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -121,7 +122,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 const automatedUpdateService = new AutomatedUpdateService();
 
 // Initialize maintenance scheduler
-let maintenanceScheduler: typeof MaintenanceScheduler | null = null;
+let maintenanceScheduler: MaintenanceScheduler | null = null;
 if (process.env.ENABLE_MAINTENANCE_SCHEDULER === 'true') {
     maintenanceScheduler = new MaintenanceScheduler();
 }
@@ -136,7 +137,6 @@ app.listen(PORT, async () => {
     
     try {
         // Initialize superadmin user first
-        const { initSuperadmin } = require('./database/init-superadmin');
         await initSuperadmin();
         logger.info('Superadmin user initialized successfully');
         
