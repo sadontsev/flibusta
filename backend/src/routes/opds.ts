@@ -1,7 +1,7 @@
 import express, { Response, NextFunction } from 'express';
 import { query, param, validationResult } from 'express-validator';
 import { getRows } from '../database/connection';
-const xml2js = require('xml2js');
+import xml2js from 'xml2js';
 import { buildErrorResponse } from '../types/api';
 import { ExtendedRequest } from '../types';
 

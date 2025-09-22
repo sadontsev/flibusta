@@ -2,8 +2,8 @@ import express, { Response, NextFunction } from 'express';
 import { query, param, validationResult } from 'express-validator';
 import { ExtendedRequest } from '../types';
 import BookService from '../services/BookService';
-// Note: Auth middleware is still in JS, using require for now
-const { optionalAuth } = require('../middleware/auth');
+import { optionalAuth } from '../middleware/auth';
+import { getRow } from '../database/connection';
 
 const router = express.Router();
 
@@ -93,7 +93,6 @@ router.get('/:id', [
     // Add user-specific data if authenticated
     if (req.user) {
       // Check if book is in user's favorites
-      const { getRow } = require('../database/connection');
       const favorite = await getRow(`
         SELECT id FROM fav 
         WHERE user_uuid = $1 AND bookid = $2
@@ -197,7 +196,6 @@ router.get('/:id/file-info', [
 // Get book statistics
 router.get('/stats/overview', async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { getRow } = require('../database/connection');
     
     const stats = await getRow(`
       SELECT 
