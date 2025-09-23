@@ -4,7 +4,8 @@
   "description": "Modern Node.js backend for Flibusta library system",
   "main": "dist/app.js",
   "scripts": {
-    "build": "tsc && tsc -p public/tsconfig.frontend.json",
+    "build": "tsc && tsc -p public/tsconfig.frontend.json && node scripts/stamp-assets.js",
+    "build:stamp": "node scripts/stamp-assets.js",
     "build:frontend": "tsc -p public/tsconfig.frontend.json",
     "start": "node dist/app.js",
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
