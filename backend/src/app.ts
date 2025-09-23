@@ -15,6 +15,7 @@ import favoritesRoutes from './routes/favorites';
 import authRoutes from './routes/auth';          // Now TypeScript
 import filesRoutes from './routes/files';        // Now TypeScript
 import { initializeSession, addUserToLocals } from './middleware/sessionMiddleware';
+import { requireAuth, requireAdmin } from './middleware/auth';
 import initSuperadmin from './database/init-superadmin';
 
 // Import remaining TypeScript modules
@@ -64,7 +65,7 @@ app.use(session({
 app.use(initializeSession);
 app.use(addUserToLocals);
 
-// Static files
+// Static files (some paths)
 app.use('/static', express.static('public'));
 app.use('/bootstrap', express.static('public/bootstrap'));
 app.use('/css', express.static('public/css'));
@@ -92,8 +93,16 @@ app.get('/health', (req: express.Request, res: express.Response) => {
     });
 });
 
-// Serve the main application
-app.get('/', (req: express.Request, res: express.Response) => {
+// Serve the main application (require an active session)
+app.get(['/', '/index.html'], (req: express.Request, res: express.Response) => {
+    // If there's no active session, redirect to login and preserve intended URL
+    // Session is initialized by initializeSession middleware above
+    const sessionUser = (req as any).session?.user_uuid;
+    if (!sessionUser) {
+        const redirectParam = encodeURIComponent(req.originalUrl || '/');
+        res.redirect(`/login?redirect=${redirectParam}`);
+        return;
+    }
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
@@ -107,7 +116,12 @@ app.get('/debug', (req: express.Request, res: express.Response) => {
     res.sendFile(path.join(__dirname, '../public/debug.html'));
 });
 
-// Serve static files from public directory
+// Admin UI (protected) - intercept before general static to avoid bypass via /admin/ or /admin/index.html
+app.get(['/admin', '/admin/', '/admin/*'], requireAuth as any, requireAdmin as any, (req: express.Request, res: express.Response) => {
+    res.sendFile(path.join(__dirname, '../public/admin/index.html'));
+});
+
+// Serve static files from public directory (placed after /admin guard)
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Error handling middleware
@@ -118,8 +132,8 @@ app.use(express.static(path.join(__dirname, '../public')));
 // const { notFoundHandler } = require('./middleware/notFoundHandler');
 // app.use(notFoundHandler);
 
-// Initialize automated update service
-const automatedUpdateService = new AutomatedUpdateService();
+// Initialize automated update service (singleton)
+const automatedUpdateService = AutomatedUpdateService.getInstance();
 
 // Initialize maintenance scheduler
 let maintenanceScheduler: MaintenanceScheduler | null = null;

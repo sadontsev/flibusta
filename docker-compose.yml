@@ -25,7 +25,8 @@ services:
     volumes:
       - './backend:/app'
       - './cache:/app/cache'
-      - '/Volumes/NAS/Books/flibusta/Flibusta.Net:/app/flibusta'
+      # Use local project books archive to avoid host NAS mount permission issues on macOS
+      - './flibusta:/app/flibusta'
       - './FlibustaSQL:/app/sql'
       - './FlibustaSQL/lib.a.attached.zip:/app/cache/lib.a.attached.zip'
       - './FlibustaSQL/lib.b.attached.zip:/app/cache/lib.b.attached.zip'

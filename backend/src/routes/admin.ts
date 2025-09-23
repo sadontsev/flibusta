@@ -3,16 +3,14 @@ import { requireAuth, requireRole, requireAdmin } from '../middleware/auth';
 import { query } from '../database/connection';
 import logger from '../utils/logger';
 import UpdateService from '../services/UpdateService';
+import AutomatedUpdateService from '../services/AutomatedUpdateService';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
-// Import services (AutomatedUpdateService will be converted next)
-const AutomatedUpdateService = require('../services/AutomatedUpdateService');
-
 const updateService = new UpdateService();
-const automatedUpdateService = new AutomatedUpdateService();
+const automatedUpdateService = AutomatedUpdateService.getInstance();
 
 // Get admin dashboard data
 router.get('/dashboard', requireAuth, requireAdmin, async (req, res) => {
@@ -418,7 +416,11 @@ router.get('/automated/schedules', requireAuth, requireAdmin, async (req, res) =
 // Enable automated update schedule
 router.post('/automated/schedules/:type/enable', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const { type } = req.params;
+        const type = (req.params as { type?: string }).type;
+        if (!type) {
+            res.status(400).json({ success: false, error: 'Type is required' });
+            return;
+        }
         await automatedUpdateService.enableSchedule(type);
 
         res.json({
@@ -437,7 +439,11 @@ router.post('/automated/schedules/:type/enable', requireAuth, requireAdmin, asyn
 // Disable automated update schedule
 router.post('/automated/schedules/:type/disable', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const { type } = req.params;
+        const type = (req.params as { type?: string }).type;
+        if (!type) {
+            res.status(400).json({ success: false, error: 'Type is required' });
+            return;
+        }
         await automatedUpdateService.disableSchedule(type);
 
         res.json({
@@ -456,14 +462,14 @@ router.post('/automated/schedules/:type/disable', requireAuth, requireAdmin, asy
 // Update automated update schedule cron expression
 router.put('/automated/schedules/:type/cron', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const { type } = req.params;
-        const { cronExpression } = req.body;
-        
-        if (!cronExpression) {
-            res.status(400).json({
-                success: false,
-                error: 'Cron expression is required'
-            });
+        const type = (req.params as { type?: string }).type;
+        const cronExpression = (req.body as { cronExpression?: string }).cronExpression;
+        if (!type) {
+            res.status(400).json({ success: false, error: 'Type is required' });
+            return;
+        }
+        if (!cronExpression || typeof cronExpression !== 'string') {
+            res.status(400).json({ success: false, error: 'Cron expression is required' });
             return;
         }
 
@@ -485,8 +491,11 @@ router.put('/automated/schedules/:type/cron', requireAuth, requireAdmin, async (
 // Manually trigger automated update
 router.post('/automated/trigger/:type', requireAuth, requireAdmin, async (req, res) => {
     try {
-        const { type } = req.params;
-        
+        const type = (req.params as { type?: string }).type;
+        if (!type) {
+            res.status(400).json({ success: false, error: 'Type is required' });
+            return;
+        }
         // Run the update asynchronously
         automatedUpdateService.runScheduledUpdate(type).catch((error: Error) => {
             logger.error(`Manual trigger for ${type} failed:`, error);

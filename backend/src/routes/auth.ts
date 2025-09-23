@@ -73,6 +73,53 @@ router.post('/login', [
   }
 });
 
+// Reset user password (admin only)
+router.post('/users/:userId/reset-password', [
+  body('new_password').isString().isLength({ min: 6 }).withMessage('New password must be at least 6 characters')
+], validate, requireAuth, requireAdmin, async (req: ExtendedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { userId } = req.params;
+    const { new_password } = req.body;
+
+    // Check if user exists
+    const existingUser = await getRow(`
+      SELECT user_uuid, role, username FROM users WHERE user_uuid = $1
+    `, [userId]);
+
+    if (!existingUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
+
+    // Prevent resetting superadmin by non-superadmin
+    const isTargetSuperadmin = existingUser.role === 'superadmin';
+    const requester = (req as AuthenticatedRequest).user;
+    if (isTargetSuperadmin && requester.role !== 'superadmin') {
+      return res.status(403).json({ success: false, error: 'Insufficient permissions' });
+    }
+
+    const saltRounds = 12;
+    const newPasswordHash = await bcrypt.hash(new_password, saltRounds);
+
+    await query(`
+      UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE user_uuid = $2
+    `, [newPasswordHash, userId]);
+
+    logger.info('Password reset by admin', {
+      admin: requester.username,
+      target: existingUser.username
+    });
+
+    res.json({ success: true, message: 'Password reset successfully' });
+    return;
+  } catch (error) {
+    next(error);
+    return;
+  }
+});
+
 // Register new user (only superadmin can create new users)
 router.post('/register', [
   body('username').isString().trim().isLength({ min: 3, max: 50 }).withMessage('Username must be between 3 and 50 characters'),

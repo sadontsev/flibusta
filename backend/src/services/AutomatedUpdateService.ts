@@ -1,7 +1,6 @@
 import * as cron from 'node-cron';
 import { query } from '../database/connection';
-// Will be converted to TS later
-const UpdateService = require('./UpdateService');
+import UpdateService from './UpdateService';
 import { promises as fs } from 'fs';
 import path from 'path';
 import logger from '../utils/logger';
@@ -13,14 +12,22 @@ import {
 } from '../types/index';
 
 class AutomatedUpdateService {
+    private static _instance: AutomatedUpdateService | null = null;
     private updateService: any; // Will be properly typed when UpdateService is converted
     private scheduler: Map<string, cron.ScheduledTask> | null;
     private isInitialized: boolean;
 
-    constructor() {
+    private constructor() {
         this.updateService = new UpdateService();
         this.scheduler = null;
         this.isInitialized = false;
+    }
+
+    static getInstance(): AutomatedUpdateService {
+        if (!this._instance) {
+            this._instance = new AutomatedUpdateService();
+        }
+        return this._instance;
     }
 
     async initialize(): Promise<void> {
