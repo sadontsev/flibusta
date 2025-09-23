@@ -77,6 +77,34 @@ class BookService {
     this.recordsPerPage = parseInt(process.env.RECORDS_PER_PAGE || '10');
   }
 
+  // Determine the actually available filetype for a book by consulting book_zip
+  private async getAvailableFiletype(bookId: number, requestedType?: string): Promise<string> {
+    try {
+      const requested = (requestedType || '').toLowerCase().trim();
+      const row = await getRow(`
+        SELECT filename
+        FROM book_zip
+        WHERE $1 BETWEEN start_id AND end_id
+        ORDER BY
+          (CASE WHEN $2 <> '' AND filename ILIKE ('f.' || $2 || '.%') THEN 1 ELSE 0 END) DESC,
+          (CASE WHEN filename ILIKE 'f.fb2.%' THEN 1 ELSE 0 END) DESC,
+          (CASE WHEN filename ILIKE 'f.epub.%' THEN 1 ELSE 0 END) DESC,
+          (CASE WHEN filename ILIKE 'f.djvu.%' THEN 1 ELSE 0 END) DESC,
+          usr ASC,
+          filename ASC
+        LIMIT 1
+      `, [bookId, requested]);
+      if (!row || !row.filename) {
+        return requested || 'unknown';
+      }
+      const m = /^f\.(\w+)\./i.exec(row.filename as string);
+      return (m && m[1]) ? m[1].toLowerCase() : (requested || 'unknown');
+    } catch (e) {
+      logger.warn('getAvailableFiletype failed, falling back', { bookId, requestedType, error: (e as Error).message });
+      return (requestedType || 'unknown');
+    }
+  }
+
   async getBookById(bookId: number): Promise<Book | null> {
     try {
       const book = await getRow(`
@@ -125,8 +153,13 @@ class BookService {
         ORDER BY time DESC
       `, [bookId]);
 
+      // Determine effective/available filetype for display
+      const effectiveType = await this.getAvailableFiletype(bookId, (book as any).filetype);
+
       return {
         ...(book as any),
+        original_filetype: (book as any).filetype,
+        filetype: effectiveType,
         authors: authors as any,
         genres: genres as any,
         series: series as any,
@@ -181,8 +214,8 @@ class BookService {
                 an.lastname ILIKE $${paramIndex} 
                 OR an.firstname ILIKE $${paramIndex}
                 OR an.nickname ILIKE $${paramIndex}
-                OR CONCAT(an.lastname, ' ', an.firstname) ILIKE $${paramIndex}
-                OR CONCAT(an.firstname, ' ', an.lastname) ILIKE $${paramIndex}
+                OR (an.lastname || ' ' || an.firstname) ILIKE $${paramIndex}
+                OR (an.firstname || ' ' || an.lastname) ILIKE $${paramIndex}
               )
             )`);
             params.push(`%${authorName}%`);
@@ -200,8 +233,8 @@ class BookService {
                 an.lastname ILIKE $${paramIndex} 
                 OR an.firstname ILIKE $${paramIndex}
                 OR an.nickname ILIKE $${paramIndex}
-                OR CONCAT(an.lastname, ' ', an.firstname) ILIKE $${paramIndex}
-                OR CONCAT(an.firstname, ' ', an.lastname) ILIKE $${paramIndex}
+                OR (an.lastname || ' ' || an.firstname) ILIKE $${paramIndex}
+                OR (an.firstname || ' ' || an.lastname) ILIKE $${paramIndex}
               )
             )
           )`);
@@ -220,8 +253,8 @@ class BookService {
             an.lastname ILIKE $${paramIndex} 
             OR an.firstname ILIKE $${paramIndex}
             OR an.nickname ILIKE $${paramIndex}
-            OR CONCAT(an.lastname, ' ', an.firstname) ILIKE $${paramIndex}
-            OR CONCAT(an.firstname, ' ', an.lastname) ILIKE $${paramIndex}
+            OR (an.lastname || ' ' || an.firstname) ILIKE $${paramIndex}
+            OR (an.firstname || ' ' || an.lastname) ILIKE $${paramIndex}
           )
         )`);
         params.push(`%${author}%`);
@@ -266,9 +299,11 @@ class BookService {
         paramIndex++;
       }
 
-      // Build ORDER BY clause based on sort parameter
+  // Build ORDER BY clause based on sort parameter
       let orderBy = 'b.bookid DESC'; // default
       let orderByParams: string[] = [];
+  // Track the starting index for relevance parameters to avoid off-by-N errors
+  let relevanceParamBase: number | null = null;
       
       switch (sort) {
         case 'relevance':
@@ -280,7 +315,10 @@ class BookService {
               query + '%',              // starts with
               '%' + query + '%'         // contains
             ];
-            paramIndex += 3;
+            // Record the base index for the three relevance parameters BEFORE incrementing
+            relevanceParamBase = paramIndex;
+            // Reserve parameter indexes for the three relevance params
+            paramIndex += orderByParams.length;
           } else {
             orderBy = 'b.bookid DESC';
           }
@@ -330,9 +368,9 @@ class BookService {
                (SELECT COUNT(*) FROM libavtor WHERE bookid = b.bookid) as author_count
                ${sort === 'relevance' && query ? `,
                CASE 
-                 WHEN b.title ILIKE $${paramIndex} THEN 1
-                 WHEN b.title ILIKE $${paramIndex + 1} THEN 2
-                 WHEN b.title ILIKE $${paramIndex + 2} THEN 3
+                 WHEN b.title ILIKE $${relevanceParamBase} THEN 1
+                 WHEN b.title ILIKE $${(relevanceParamBase as number) + 1} THEN 2
+                 WHEN b.title ILIKE $${(relevanceParamBase as number) + 2} THEN 3
                  ELSE 4
                END as relevance_score` : ''}
         FROM libbook b
@@ -376,11 +414,14 @@ class BookService {
           LIMIT 3
         `, [book.bookid]);
 
+        // Determine effective filetype for display
+        const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
+
         return {
           ...book,
           authors: primaryAuthor ? [primaryAuthor] : [],
           genres: genres.map(g => ({ genredesc: g.genredesc })),
-          filetype: book.filetype || 'unknown'
+          filetype: effectiveType || book.filetype || 'unknown'
         };
       }));
 
@@ -421,6 +462,9 @@ class BookService {
           ORDER BY a.pos
         `, [book.bookid]);
         book.authors = authors;
+        // Override filetype with actually available one
+        const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
+        (book as any).filetype = effectiveType || book.filetype;
       }
 
       return books as any;
@@ -464,6 +508,8 @@ class BookService {
           ORDER BY a.pos
         `, [book.bookid]);
         book.authors = authors;
+        const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
+        (book as any).filetype = effectiveType || book.filetype;
       }
 
       return {
@@ -517,6 +563,8 @@ class BookService {
           ORDER BY a.pos
         `, [book.bookid]);
         book.authors = authors;
+        const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
+        (book as any).filetype = effectiveType || book.filetype;
       }
 
       return {

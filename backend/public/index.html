@@ -10,7 +10,7 @@
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- Custom CSS -->
-    <link href="/css/style.css?v=4" rel="stylesheet">
+    <link href="/css/style.css?v=5" rel="stylesheet">
     
     <link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
 </head>
@@ -78,12 +78,12 @@
 
 
 
-    <!-- Change Password Modal -->
-    <div id="changePasswordModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    
+    <div id="changePasswordModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 items-center justify-center">
         <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
             <div class="flex items-center justify-between p-6 border-b border-gray-700">
                 <h5 class="text-xl font-semibold text-white">Сменить пароль</h5>
-                <button type="button" class="text-gray-400 hover:text-white text-2xl" onclick="app.hideChangePasswordModal()">&times;</button>
+                <button type="button" class="text-gray-400 hover:text-white text-2xl" onclick="app.ui.hideChangePasswordModal()">&times;</button>
             </div>
             <div class="p-6">
                 <form id="changePasswordForm">
@@ -103,18 +103,18 @@
                 </form>
             </div>
             <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-700">
-                <button type="button" class="px-4 py-2 text-gray-300 hover:text-white" onclick="app.hideChangePasswordModal()">Отмена</button>
-                <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" onclick="app.changePassword()">Сменить пароль</button>
+                <button type="button" class="px-4 py-2 text-gray-300 hover:text-white" onclick="app.ui.hideChangePasswordModal()">Отмена</button>
+                <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" onclick="app.auth.changePassword()">Сменить пароль</button>
             </div>
         </div>
     </div>
 
     <!-- Profile Modal -->
-    <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div id="profileModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 items-center justify-center">
         <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
             <div class="flex items-center justify-between p-6 border-b border-gray-700">
                 <h5 class="text-xl font-semibold text-white">Профиль пользователя</h5>
-                <button type="button" class="text-gray-400 hover:text-white text-2xl" onclick="app.hideProfileModal()">&times;</button>
+                <button type="button" class="text-gray-400 hover:text-white text-2xl" onclick="app.ui.hideProfileModal()">&times;</button>
             </div>
             <div class="p-6">
                 <form id="profileForm">
@@ -134,18 +134,18 @@
                 </form>
             </div>
             <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-700">
-                <button type="button" class="px-4 py-2 text-gray-300 hover:text-white" onclick="app.hideProfileModal()">Отмена</button>
-                <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" onclick="app.updateProfile()">Сохранить</button>
+                <button type="button" class="px-4 py-2 text-gray-300 hover:text-white" onclick="app.ui.hideProfileModal()">Отмена</button>
+                <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" onclick="app.auth.updateProfile()">Сохранить</button>
             </div>
         </div>
     </div>
 
     <!-- Create User Modal (Admin Only) -->
-    <div id="createUserModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div id="createUserModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 items-center justify-center">
         <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4">
             <div class="flex items-center justify-between p-6 border-b border-gray-700">
                 <h5 class="text-xl font-semibold text-white">Создать пользователя</h5>
-                <button type="button" class="text-gray-400 hover:text-white text-2xl" onclick="app.hideCreateUserModal()">&times;</button>
+                <button type="button" class="text-gray-400 hover:text-white text-2xl" onclick="app.ui.hideCreateUserModal()">&times;</button>
             </div>
             <div class="p-6">
                 <form id="createUserForm">
@@ -176,7 +176,7 @@
                 </form>
             </div>
             <div class="flex items-center justify-end space-x-3 p-6 border-t border-gray-700">
-                <button type="button" class="px-4 py-2 text-gray-300 hover:text-white" onclick="app.hideCreateUserModal()">Отмена</button>
+                <button type="button" class="px-4 py-2 text-gray-300 hover:text-white" onclick="app.ui.hideCreateUserModal()">Отмена</button>
                 <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium" onclick="app.auth.createUser()">Создать</button>
             </div>
         </div>
@@ -186,7 +186,7 @@
     <div id="toast" class="fixed bottom-4 right-4 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 hidden max-w-sm">
         <div class="flex items-center justify-between p-4 border-b border-gray-700">
             <strong class="text-white font-medium" id="toastTitle">Уведомление</strong>
-            <button type="button" class="text-gray-400 hover:text-white text-xl" onclick="app.hideToast()">&times;</button>
+            <button type="button" class="text-gray-400 hover:text-white text-xl" onclick="app.ui.hideToast()">&times;</button>
         </div>
         <div class="p-4 text-gray-300" id="toastBody">
             Сообщение
@@ -194,14 +194,14 @@
     </div>
 
     <!-- Module Scripts -->
-    <script src="/js/modules/auth.js"></script>
-    <script src="/js/modules/ui.js"></script>
-    <script src="/js/modules/api.js"></script>
-    <script src="/js/modules/display.js"></script>
-    <script src="/js/modules/progressive-loader.js"></script>
-    <script src="/js/modules/enhanced-search.js"></script>
+    <script src="/js/modules/auth.js?v=20250923.2"></script>
+    <script src="/js/modules/ui.js?v=20250923.2"></script>
+    <script src="/js/modules/api.js?v=20250923.2"></script>
+    <script src="/js/modules/display.js?v=20250923.2"></script>
+    <script src="/js/modules/progressive-loader.js?v=20250923.2"></script>
+    <script src="/js/modules/enhanced-search.js?v=20250923.2"></script>
     
     <!-- Main App -->
-    <script src="/js/app.js?v=18"></script>
+    <script src="/js/app.js?v=20250923.2"></script>
 </body>
 </html>

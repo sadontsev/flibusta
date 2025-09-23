@@ -103,11 +103,21 @@ app.get(['/', '/index.html'], (req: express.Request, res: express.Response) => {
         res.redirect(`/login?redirect=${redirectParam}`);
         return;
     }
+    // Prevent caching of the main shell to avoid stale DOM/comments after login
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
     res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
 // Serve the login page
 app.get('/login', (req: express.Request, res: express.Response) => {
+    // Prevent caching of the login page as well
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    res.setHeader('Surrogate-Control', 'no-store');
     res.sendFile(path.join(__dirname, '../public/login.html'));
 });
 
@@ -122,11 +132,29 @@ app.get(['/admin', '/admin/', '/admin/*'], requireAuth as any, requireAdmin as a
 });
 
 // Serve static files from public directory (placed after /admin guard)
-app.use(express.static(path.join(__dirname, '../public')));
+// Add no-store for HTML files served statically to avoid cached shells
+app.use(express.static(path.join(__dirname, '../public'), {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            res.setHeader('Surrogate-Control', 'no-store');
+        }
+    }
+}));
 
 // Error handling middleware
-// const { errorHandler } = require('./middleware/errorHandler');
-// app.use(errorHandler);
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const message = err?.message || 'Internal Server Error';
+    const stack = err?.stack;
+    logger.error('Unhandled error', { message, stack });
+    if (!res.headersSent) {
+        res.status(500).json({ success: false, error: message });
+    } else {
+        next(err);
+    }
+});
 
 // 404 handler
 // const { notFoundHandler } = require('./middleware/notFoundHandler');

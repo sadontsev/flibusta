@@ -15,6 +15,7 @@ body {
 /* Line clamp utility for text truncation */
 .line-clamp-2 {
     display: -webkit-box;
+    line-clamp: 2;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
@@ -590,3 +591,9 @@ img[src*="data:image/svg+xml"] {
 .search-interface .mb-3 {
     margin-bottom: 0.75rem;
 }
+
+/* Tile size controls for books grid */
+.tile-cover { height: 16rem; }
+.tiles-sm .tile-cover { height: 8rem; }
+.tiles-md .tile-cover { height: 16rem; }
+.tiles-lg .tile-cover { height: 24rem; }

@@ -111,3 +111,6 @@ FlibustaSQL/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+
+# Frontend compiled assets (generated from backend/public/ts)
+backend/public/js/

@@ -190,30 +190,10 @@
                     if (result.success) {
                         this.showSuccess('Вход выполнен успешно! Перенаправление...');
                         
-                        // Get redirect URL from query parameters
-                        const urlParams = new URLSearchParams(window.location.search);
-                        let redirect = urlParams.get('redirect') || '/';
-
-                        // If redirect points to admin, verify user is admin; otherwise, go home
-                        try {
-                            const meRes = await fetch('/api/auth/me', { credentials: 'include' });
-                            if (meRes.ok) {
-                                const me = await meRes.json();
-                                const role = me?.data?.role;
-                                const wantsAdmin = redirect.startsWith('/admin');
-                                if (wantsAdmin && !(role === 'admin' || role === 'superadmin')) {
-                                    redirect = '/';
-                                }
-                            }
-                        } catch (e) {
-                            // If check fails, default to non-admin path
-                            if (redirect.startsWith('/admin')) redirect = '/';
-                        }
-
-                        // Redirect after a short delay
+                        // Always send to main page; app will default to Home/Books
                         setTimeout(() => {
-                            window.location.href = redirect;
-                        }, 600);
+                            window.location.href = '/';
+                        }, 300);
                         
                     } else {
                         this.showError(result.error || 'Ошибка входа в систему');

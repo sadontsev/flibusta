@@ -43,22 +43,32 @@ router.get('/book/:bookId', [
 
   if (!book) {
     return res.status(404).json(buildErrorResponse('Book not found'));
-  }    console.log('Book info:', { bookId, title: book.title, filetype: book.filetype, filename: book.filename });
+  }
+  console.log('Book info:', { bookId, title: book.title, filetype: book.filetype, filename: book.filename });
 
-    // Get file info
-    console.log('Querying book_zip table for bookId:', bookId);
+    // Determine requested type (normalized)
+    const requestedType = (book.filetype || '').toLowerCase().trim();
+
+    // Get file info: prioritize matching requested type, otherwise fall back to fb2/epub/djvu
+    console.log('Querying book_zip table for bookId with type preference:', bookId, requestedType);
     const fileInfo = await getRow(`
       SELECT filename, start_id, end_id, usr
       FROM book_zip
       WHERE $1 BETWEEN start_id AND end_id
-        AND filename LIKE 'f.${book.filetype.trim()}.%'
-      ORDER BY usr ASC
+      ORDER BY
+        (CASE WHEN $2 <> '' AND filename ILIKE ('f.' || $2 || '.%') THEN 1 ELSE 0 END) DESC,
+        (CASE WHEN filename ILIKE 'f.fb2.%' THEN 1 ELSE 0 END) DESC,
+        (CASE WHEN filename ILIKE 'f.epub.%' THEN 1 ELSE 0 END) DESC,
+        (CASE WHEN filename ILIKE 'f.djvu.%' THEN 1 ELSE 0 END) DESC,
+        usr ASC,
+        filename ASC
       LIMIT 1
-    `, [bookId]);
+    `, [bookId, requestedType]);
 
   if (!fileInfo) {
     return res.status(404).json(buildErrorResponse('Book file not found. This book may not be available for download or the file mapping is missing.'));
-  }    console.log('File info:', { filename: fileInfo.filename, start_id: fileInfo.start_id, end_id: fileInfo.end_id });
+  }
+  console.log('File info:', { filename: fileInfo.filename, start_id: fileInfo.start_id, end_id: fileInfo.end_id });
 
     const zipPath = path.join(process.env.BOOKS_PATH || '/application/flibusta', fileInfo.filename);
     console.log('ZIP path:', zipPath);
@@ -72,36 +82,50 @@ router.get('/book/:bookId', [
     }
 
     // Extract file from ZIP
-    const zip = new AdmZip(zipPath);
-    const zipEntries = zip.getEntries();
+  const zip = new AdmZip(zipPath);
+  const zipEntries = zip.getEntries();
     console.log('ZIP entries count:', zipEntries.length);
     
     // Find the book file in the ZIP
-    let bookEntry = null;
-    
+  let bookEntry: any = null;
+
+    // Normalize helper
+    const toLower = (s: string) => (s || '').toLowerCase();
+    const entryNameMatches = (entryNameLower: string, fileNameLower: string) => {
+      // Allow entries within subfolders; check for exact filename match at end
+      return entryNameLower.endsWith(`/${fileNameLower}`) || entryNameLower === fileNameLower || entryNameLower.includes(`/${fileNameLower}`);
+    };
+
+    // Try exact filename first if available
     if (book.filename) {
-      // Try to find by exact filename first
-      bookEntry = zipEntries.find(entry => {
-        const entryName = entry.entryName.toLowerCase();
-        const bookFileName = book.filename.toLowerCase();
-        return entryName.includes(bookFileName);
-      });
+      const bookFileName = toLower(book.filename);
+      bookEntry = zipEntries.find(entry => entryNameMatches(toLower(entry.entryName), bookFileName)) || null;
     }
-    
-    // If not found by filename, try to find by book ID and filetype
+
+    // Determine archive type from filename (e.g., f.fb2.*, f.epub.*)
+    const archiveTypeMatch = /^f\.(\w+)\./i.exec(fileInfo.filename || '');
+  const archiveType = archiveTypeMatch && archiveTypeMatch[1] ? archiveTypeMatch[1].toLowerCase() : '';
+    const requested = requestedType;
+
+    // Build preferred extensions order
+    const baseExts = ['fb2', 'epub', 'djvu', 'pdf', 'mobi', 'txt', 'rtf', 'html', 'htm'];
+    const preferredExts = Array.from(new Set([archiveType, requested, ...baseExts].filter(Boolean)));
+
+    // Try exact bookId with preferred extensions
     if (!bookEntry) {
-      bookEntry = zipEntries.find(entry => {
-        const entryName = entry.entryName.toLowerCase();
-        return entryName.includes(`${bookId}.`) && entryName.endsWith(`.${book.filetype.toLowerCase()}`);
-      });
+      for (const ext of preferredExts) {
+        const candidate = `${bookId}.${ext}`;
+        const found = zipEntries.find(entry => toLower(entry.entryName).endsWith(`/${candidate}`) || toLower(entry.entryName).endsWith(candidate));
+        if (found) { bookEntry = found; break; }
+      }
     }
-    
-    // If still not found, try to find any file with the correct extension
+
+    // As a last resort, try any file with preferred extensions
     if (!bookEntry) {
-      bookEntry = zipEntries.find(entry => {
-        const entryName = entry.entryName.toLowerCase();
-        return entryName.endsWith(`.${book.filetype.toLowerCase()}`);
-      });
+      for (const ext of preferredExts) {
+        const found = zipEntries.find(entry => toLower(entry.entryName).endsWith(`.${ext}`));
+        if (found) { bookEntry = found; break; }
+      }
     }
 
     if (!bookEntry) {
@@ -109,11 +133,16 @@ router.get('/book/:bookId', [
       return res.status(404).json(buildErrorResponse('Book file not found in archive'));
     }
 
-    console.log('Found book entry:', bookEntry.entryName);
+  console.log('Found book entry:', bookEntry.entryName);
 
-    // Set appropriate headers
-    const fileName = `${book.author_name} - ${book.title}.${book.filetype}`;
-    res.setHeader('Content-Type', getContentType(book.filetype));
+  // Derive extension from actual entry name for proper content-type
+  const actualNameLower = toLower(bookEntry.entryName);
+  const actualExtMatch = /\.([a-z0-9]+)$/.exec(actualNameLower);
+  const actualExt = actualExtMatch ? actualExtMatch[1] : (requested || archiveType || 'fb2');
+
+  // Set appropriate headers
+  const fileName = `${book.author_name} - ${book.title}.${actualExt}`;
+  res.setHeader('Content-Type', getContentType(actualExt));
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
     res.setHeader('Content-Length', bookEntry.header.size);
 
