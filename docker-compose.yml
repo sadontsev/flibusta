@@ -25,8 +25,8 @@ services:
     volumes:
       - './backend:/app'
       - './cache:/app/cache'
-      # Use local project books archive to avoid host NAS mount permission issues on macOS
-      - './flibusta:/app/flibusta'
+      # Books archive path; defaults to ./flibusta but can be overridden with BOOKS_HOST_PATH in .env
+      - '${BOOKS_HOST_PATH-./flibusta}:/app/flibusta'
       - './FlibustaSQL:/app/sql'
       - './FlibustaSQL/lib.a.attached.zip:/app/cache/lib.a.attached.zip'
       - './FlibustaSQL/lib.b.attached.zip:/app/cache/lib.b.attached.zip'

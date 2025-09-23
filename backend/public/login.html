@@ -192,12 +192,28 @@
                         
                         // Get redirect URL from query parameters
                         const urlParams = new URLSearchParams(window.location.search);
-                        const redirect = urlParams.get('redirect') || '/';
-                        
+                        let redirect = urlParams.get('redirect') || '/';
+
+                        // If redirect points to admin, verify user is admin; otherwise, go home
+                        try {
+                            const meRes = await fetch('/api/auth/me', { credentials: 'include' });
+                            if (meRes.ok) {
+                                const me = await meRes.json();
+                                const role = me?.data?.role;
+                                const wantsAdmin = redirect.startsWith('/admin');
+                                if (wantsAdmin && !(role === 'admin' || role === 'superadmin')) {
+                                    redirect = '/';
+                                }
+                            }
+                        } catch (e) {
+                            // If check fails, default to non-admin path
+                            if (redirect.startsWith('/admin')) redirect = '/';
+                        }
+
                         // Redirect after a short delay
                         setTimeout(() => {
                             window.location.href = redirect;
-                        }, 1000);
+                        }, 600);
                         
                     } else {
                         this.showError(result.error || 'Ошибка входа в систему');
