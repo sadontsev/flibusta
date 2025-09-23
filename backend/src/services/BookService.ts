@@ -160,6 +160,7 @@ class BookService {
         ...(book as any),
         original_filetype: (book as any).filetype,
         filetype: effectiveType,
+        cover_url: `/api/files/cover/${bookId}`,
         authors: authors as any,
         genres: genres as any,
         series: series as any,
@@ -421,7 +422,8 @@ class BookService {
           ...book,
           authors: primaryAuthor ? [primaryAuthor] : [],
           genres: genres.map(g => ({ genredesc: g.genredesc })),
-          filetype: effectiveType || book.filetype || 'unknown'
+          filetype: effectiveType || book.filetype || 'unknown',
+          cover_url: `/api/files/cover/${book.bookid}`
         };
       }));
 
@@ -465,6 +467,7 @@ class BookService {
         // Override filetype with actually available one
         const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
         (book as any).filetype = effectiveType || book.filetype;
+        (book as any).cover_url = `/api/files/cover/${book.bookid}`;
       }
 
       return books as any;
@@ -510,6 +513,7 @@ class BookService {
         book.authors = authors;
         const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
         (book as any).filetype = effectiveType || book.filetype;
+        (book as any).cover_url = `/api/files/cover/${book.bookid}`;
       }
 
       return {
@@ -565,6 +569,7 @@ class BookService {
         book.authors = authors;
         const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
         (book as any).filetype = effectiveType || book.filetype;
+        (book as any).cover_url = `/api/files/cover/${book.bookid}`;
       }
 
       return {

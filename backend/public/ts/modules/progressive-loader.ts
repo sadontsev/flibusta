@@ -66,10 +66,16 @@ class ProgressiveLoaderNG {
   }
   gridClass() {
     switch (this.cardSize) {
-      case 'sm': return 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4';
-      case 'lg': return 'grid grid-cols-1 sm:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8';
+      case 'sm':
+        // Small: 3 cards per row
+        return 'grid grid-cols-3 gap-4';
       case 'md':
-      default: return 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6';
+        // Medium: 2 cards per row
+        return 'grid grid-cols-2 gap-6';
+      case 'lg':
+      default:
+        // Large: 1 card per row
+        return 'grid grid-cols-1 gap-8';
     }
   }
   setCardSize(size: 'sm'|'md'|'lg') {

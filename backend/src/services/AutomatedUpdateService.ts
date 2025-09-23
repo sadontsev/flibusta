@@ -154,10 +154,10 @@ class AutomatedUpdateService {
                 status: 'success',
                 completed_at: new Date(),
                 duration_seconds: duration,
-                processed_files: stats.processed,
-                successful_files: stats.successful,
-                failed_files: stats.failed,
-                operation_details: result as Record<string, unknown>
+                files_processed: stats.processed,
+                files_successful: stats.successful,
+                files_failed: stats.failed,
+                details: result as Record<string, unknown>
             });
             
             logger.info(`Scheduled update ${updateType} completed successfully in ${duration}s`);
@@ -284,8 +284,8 @@ class AutomatedUpdateService {
                 COUNT(CASE WHEN status = 'error' THEN 1 END) as failed_runs,
                 MAX(started_at) as last_run,
                 AVG(duration_seconds) as avg_duration,
-                SUM(successful_files) as total_files_successful,
-                SUM(failed_files) as total_files_failed
+                SUM(files_successful) as total_files_successful,
+                SUM(files_failed) as total_files_failed
             FROM update_history 
             GROUP BY update_type
             ORDER BY update_type

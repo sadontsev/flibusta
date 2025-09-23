@@ -23,7 +23,7 @@ const requireAuth = async (req: ExtendedRequest, res: Response, next: NextFuncti
   try {
     if (!req.session.user_uuid) {
       // Check if this is an API request
-      if (req.path.startsWith('/api/')) {
+      if ((req.originalUrl || '').startsWith('/api/')) {
         return res.status(401).json({
           success: false,
           error: 'Authentication required'
@@ -42,7 +42,7 @@ const requireAuth = async (req: ExtendedRequest, res: Response, next: NextFuncti
     `, [req.session.user_uuid]) as User | null;
 
     if (!user || !user.is_active) {
-      if (req.path.startsWith('/api/')) {
+      if ((req.originalUrl || '').startsWith('/api/')) {
         return res.status(401).json({
           success: false,
           error: 'User not found or inactive'
@@ -57,7 +57,7 @@ const requireAuth = async (req: ExtendedRequest, res: Response, next: NextFuncti
     next();
   } catch (error) {
     logger.error('Auth middleware error:', error);
-    if (req.path.startsWith('/api/')) {
+    if ((req.originalUrl || '').startsWith('/api/')) {
       return res.status(500).json({
         success: false,
         error: 'Authentication error'
@@ -93,7 +93,7 @@ const optionalAuth = async (req: ExtendedRequest, res: Response, next: NextFunct
 const requireRole = (roles: string | string[]) => {
   return (req: ExtendedRequest, res: Response, next: NextFunction): Response | void => {
     if (!req.user || req.user.type !== 'registered') {
-      if (req.path.startsWith('/api/')) {
+      if ((req.originalUrl || '').startsWith('/api/')) {
         return res.status(401).json({
           success: false,
           error: 'Authentication required'
@@ -108,7 +108,7 @@ const requireRole = (roles: string | string[]) => {
     const allowedRoles = Array.isArray(roles) ? roles : [roles];
 
     if (!allowedRoles.includes(userRole)) {
-      if (req.path.startsWith('/api/')) {
+      if ((req.originalUrl || '').startsWith('/api/')) {
         return res.status(403).json({
           success: false,
           error: 'Insufficient permissions'

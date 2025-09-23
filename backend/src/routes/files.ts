@@ -3,6 +3,8 @@ import { param, validationResult } from 'express-validator';
 import path from 'path';
 import fs from 'fs/promises';
 import AdmZip from 'adm-zip';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 // const sharp = require('sharp'); // Temporarily disabled for ARM64 compatibility
 import { getRow } from '../database/connection';
 import logger from '../utils/logger';
@@ -13,6 +15,210 @@ import { buildErrorResponse } from '../types/api';
 import { ExtendedRequest } from '../types';
 
 const router = express.Router();
+const execFileAsync = promisify(execFile);
+
+async function extractZipEntry(zipPath: string, internalPath: string): Promise<Buffer> {
+  // Use system unzip to stream a single entry; avoids loading huge ZIP into memory
+  // BusyBox unzip supports -p
+  const { stdout } = await execFileAsync('unzip', ['-p', zipPath, internalPath], { encoding: 'buffer', maxBuffer: 1024 * 1024 * 50 });
+  return stdout as unknown as Buffer;
+}
+
+// Helper: ensure directory exists
+async function ensureDir(dirPath: string): Promise<void> {
+  try { await fs.mkdir(dirPath, { recursive: true }); } catch {}
+}
+
+// Helper: detect image extension from magic bytes
+function detectImageExt(buf: Buffer): 'jpg' | 'jpeg' | 'png' | 'gif' | 'webp' | null {
+  if (!buf || buf.length < 12) return null;
+  // JPEG
+  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'jpg';
+  // PNG
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'png';
+  // GIF
+  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return 'gif';
+  // WEBP (RIFF....WEBP)
+  if (buf.slice(0, 4).toString('ascii') === 'RIFF' && buf.slice(8, 12).toString('ascii') === 'WEBP') return 'webp';
+  return null;
+}
+
+function imageContentType(ext: string): string {
+  switch (ext.toLowerCase()) {
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'png': return 'image/png';
+    case 'gif': return 'image/gif';
+    case 'webp': return 'image/webp';
+    default: return 'application/octet-stream';
+  }
+}
+
+// Helper: check cache for any supported image extension
+async function findCachedImage(baseDir: string, baseName: string): Promise<string | null> {
+  const exts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+  for (const ext of exts) {
+    const p = path.join(baseDir, `${baseName}.${ext}`);
+    try { await fs.access(p); return p; } catch {}
+  }
+  return null;
+}
+
+// Locate a book entry within the flibusta book zips
+async function getBookZipEntry(bookId: number, requestedType?: string): Promise<{ zipPath: string; entryName: string; entryBuffer: Buffer; }> {
+  // Determine requested type
+  const requested = (requestedType || '').toLowerCase().trim();
+  // Look up zip file from book_zip with preference logic
+  const fileInfo = await getRow(`
+      SELECT filename, start_id, end_id, usr
+      FROM book_zip
+      WHERE $1 BETWEEN start_id AND end_id
+      ORDER BY
+        (CASE WHEN $2 <> '' AND filename ILIKE ('f.' || $2 || '.%') THEN 1 ELSE 0 END) DESC,
+        (CASE WHEN filename ILIKE 'f.fb2.%' THEN 1 ELSE 0 END) DESC,
+        (CASE WHEN filename ILIKE 'f.epub.%' THEN 1 ELSE 0 END) DESC,
+        (CASE WHEN filename ILIKE 'f.djvu.%' THEN 1 ELSE 0 END) DESC,
+        usr ASC,
+        filename ASC
+      LIMIT 1
+    `, [bookId, requested]);
+
+  if (!fileInfo || !fileInfo.filename) {
+    throw new Error('Book archive mapping not found');
+  }
+
+  const booksRoot = process.env.BOOKS_PATH || '/application/flibusta';
+  const zipPath = path.join(booksRoot, String(fileInfo.filename));
+  // Access file
+  await fs.access(zipPath);
+
+  // Read entries
+  const zip = new AdmZip(zipPath);
+  const entries = zip.getEntries();
+  const toLower = (s: string) => (s || '').toLowerCase();
+
+  // Try libfilename first
+  let bookFilename: string | null = null;
+  const lf = await getRow(`SELECT filename FROM libfilename WHERE bookid = $1 LIMIT 1`, [bookId]);
+  if (lf && lf.filename) bookFilename = toLower(String(lf.filename));
+
+  const entryNameMatches = (entryNameLower: string, fileNameLower: string) => {
+    return entryNameLower.endsWith(`/${fileNameLower}`) || entryNameLower === fileNameLower || entryNameLower.includes(`/${fileNameLower}`);
+  };
+
+  let found: any = null;
+  if (bookFilename) {
+    found = entries.find(e => entryNameMatches(toLower(e.entryName), bookFilename!)) || null;
+  }
+
+  // Preferred extensions order using archive/requested type
+  const archiveTypeMatch = /^f\.(\w+)\./i.exec(fileInfo.filename || '');
+  const archiveType = archiveTypeMatch && archiveTypeMatch[1] ? archiveTypeMatch[1].toLowerCase() : '';
+  const baseExts = ['fb2', 'epub', 'djvu', 'pdf', 'mobi', 'txt', 'rtf', 'html', 'htm'];
+  const preferredExts = Array.from(new Set([archiveType, requested, ...baseExts].filter(Boolean)));
+  if (!found) {
+    for (const ext of preferredExts) {
+      const candidate = `${bookId}.${ext}`;
+      const f = entries.find(e => toLower(e.entryName).endsWith(`/${candidate}`) || toLower(e.entryName).endsWith(candidate));
+      if (f) { found = f; break; }
+    }
+  }
+  if (!found) {
+    for (const ext of preferredExts) {
+      const f = entries.find(e => toLower(e.entryName).endsWith(`.${ext}`));
+      if (f) { found = f; break; }
+    }
+  }
+  if (!found) {
+    throw new Error('Book file not found in archive');
+  }
+
+  return { zipPath, entryName: found.entryName, entryBuffer: found.getData() };
+}
+
+// Extract cover from FB2 XML buffer using heuristics
+function extractCoverFromFb2(fb2Buffer: Buffer): Buffer | null {
+  try {
+    const xml = fb2Buffer.toString('utf8');
+    // Quick heuristic: find binary blocks likely to be cover
+    // 1) Look for <binary id="...cover..."> first
+    const coverIdMatch = xml.match(/<binary[^>]*id=["']([^"']*cover[^"']*)["'][^>]*>([\s\S]*?)<\/binary>/i);
+    if (coverIdMatch && coverIdMatch[2]) {
+      const b64 = coverIdMatch[2].replace(/\s+/g, '');
+      try { return Buffer.from(b64, 'base64'); } catch {}
+    }
+    // 2) Any binary with image content-type
+    const imgBinaryMatch = xml.match(/<binary[^>]*content-type=["']image\/(?:jpeg|jpg|png|gif|webp)["'][^>]*>([\s\S]*?)<\/binary>/i);
+    if (imgBinaryMatch && imgBinaryMatch[1]) {
+      const b64 = imgBinaryMatch[1].replace(/\s+/g, '');
+      try { return Buffer.from(b64, 'base64'); } catch {}
+    }
+    // 3) Fallback: first binary containing jpg/png keyword in id
+    const anyBinaryMatch = xml.match(/<binary[^>]*id=["'][^"']*(?:jpg|jpeg|png|cover)[^"']*["'][^>]*>([\s\S]*?)<\/binary>/i);
+    if (anyBinaryMatch && anyBinaryMatch[1]) {
+      const b64 = anyBinaryMatch[1].replace(/\s+/g, '');
+      try { return Buffer.from(b64, 'base64'); } catch {}
+    }
+  } catch {}
+  return null;
+}
+
+// Extract cover from EPUB buffer (zip) using container.xml/opf heuristics
+function extractCoverFromEpub(epubBuffer: Buffer): Buffer | null {
+  try {
+    const zip = new AdmZip(epubBuffer);
+    const entries = zip.getEntries();
+    const getEntry = (name: string) => entries.find(e => e.entryName.toLowerCase() === name.toLowerCase());
+    const readText = (e: any) => e ? e.getData().toString('utf8') : '';
+
+    // Find OPF via META-INF/container.xml
+    const container = getEntry('META-INF/container.xml');
+    let opfPath = '';
+    if (container) {
+      const xml = readText(container);
+      const m = xml.match(/full-path=["']([^"']+)["']/i);
+      if (m) opfPath = m[1];
+    }
+    // Read OPF and try to locate cover
+    if (opfPath) {
+      const opf = getEntry(opfPath);
+      if (opf) {
+        const opfXml = readText(opf);
+        // meta name="cover" content="id"
+        const meta = opfXml.match(/<meta[^>]*name=["']cover["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+        let coverHref = '';
+        if (meta) {
+          const coverId = meta[1];
+          const itemMatch = opfXml.match(new RegExp(`<item[^>]*id=["']${coverId}["'][^>]*href=["']([^"']+)["'][^>]*>`, 'i'));
+          if (itemMatch) coverHref = itemMatch[1];
+        }
+        if (!coverHref) {
+          // guide reference type="cover"
+          const guideMatch = opfXml.match(/<reference[^>]*type=["']cover["'][^>]*href=["']([^"']+)["'][^>]*>/i);
+          if (guideMatch) coverHref = guideMatch[1];
+        }
+        // Resolve path relative to OPF
+        if (coverHref) {
+          const baseDir = opfPath.split('/').slice(0, -1).join('/');
+          const rel = baseDir ? `${baseDir}/${coverHref}` : coverHref;
+          const norm = rel.replace(/\\/g, '/');
+          const coverEntry = entries.find(e => e.entryName.toLowerCase() === norm.toLowerCase());
+          if (coverEntry) return coverEntry.getData();
+        }
+      }
+    }
+    // Heuristic fallback: find common cover filenames
+  const candidates = entries.filter(e => /cover\.(jpe?g|png|gif|webp)$/i.test(e.entryName) || /images\/cover/i.test(e.entryName));
+  if (candidates.length > 0 && candidates[0]) return candidates[0]!.getData();
+    // Fallback: largest image in EPUB
+    const imageEntries = entries.filter(e => /(jpe?g|png|gif|webp)$/i.test(e.entryName));
+    if (imageEntries.length) {
+      imageEntries.sort((a, b) => b.header.size - a.header.size);
+      if (imageEntries[0]) return imageEntries[0]!.getData();
+    }
+  } catch {}
+  return null;
+}
 
 // Validation middleware
 const validate = (req: ExtendedRequest, res: Response, next: NextFunction): Response | void => {
@@ -170,32 +376,19 @@ router.get('/author/:authorId', [
 
   if (!authorImage) {
     return res.status(404).json(buildErrorResponse('Author image not found'));
-  }    // Check if cached image exists
-    const cachePath = path.join(process.env.AUTHORS_CACHE_PATH || '/application/cache/authors', `${authorId}.jpg`);
-    
+  }
+    // Ensure authors cache directory exists and check if cached image exists
+    const authorsCacheRoot = process.env.AUTHORS_CACHE_PATH || '/app/cache/authors';
+    await ensureDir(authorsCacheRoot);
+    const cached = await findCachedImage(authorsCacheRoot, String(authorId));
+    if (cached) { return res.sendFile(cached); }
     try {
-      await fs.access(cachePath);
-      // Serve cached image
-      res.sendFile(cachePath);
-    } catch (error) {
       // Try to extract from ZIP archive
-      const zipPath = path.join(process.env.CACHE_PATH || '/application/cache', 'lib.a.attached.zip');
-      
+      const zipPath = path.join(process.env.CACHE_PATH || '/app/cache', 'lib.a.attached.zip');
       try {
         await fs.access(zipPath);
-        const zip = new AdmZip(zipPath);
-        const zipEntries = zip.getEntries();
-        
-        const imageEntry = zipEntries.find(entry => 
-          entry.entryName.includes(authorImage.file)
-        );
-
-        if (!imageEntry) {
-          return res.status(404).json(buildErrorResponse('Author image not found in archive'));
-        }
-
-        // Process and cache the image
-        const imageBuffer = imageEntry.getData();
+        // Extract exact path from archive using unzip -p to avoid >2GB zip memory issues
+        const imageBuffer = await extractZipEntry(zipPath, authorImage.file);
         // Temporarily disable sharp processing for ARM64 compatibility
         // const processedImage = await sharp(imageBuffer)
         //   .resize(200, 200, { fit: 'cover' })
@@ -203,16 +396,20 @@ router.get('/author/:authorId', [
         //   .toBuffer();
         const processedImage = imageBuffer; // Serve original image for now
 
-        // Save to cache
-        await fs.writeFile(cachePath, processedImage);
+    // Save to cache with detected extension
+    const ext = detectImageExt(processedImage) || 'jpg';
+    const cachePath = path.join(authorsCacheRoot, `${authorId}.${ext}`);
+    await fs.writeFile(cachePath, processedImage);
 
-        // Set headers and send
-        res.setHeader('Content-Type', 'image/jpeg');
+    // Set headers and send
+  res.setHeader('Content-Type', imageContentType(ext));
         res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
-        res.send(processedImage);
+  return res.send(processedImage);
       } catch (zipError) {
         return res.status(404).json(buildErrorResponse('Author image archive not found'));
       }
+    } catch (e) {
+      return res.status(404).json(buildErrorResponse('Author image archive not found'));
     }
 }));
 
@@ -227,52 +424,57 @@ router.get('/cover/:bookId', [
       SELECT file FROM libbpics WHERE bookid = $1 LIMIT 1
     `, [bookId]);
 
-  if (!bookCover) {
-    return res.status(404).json(buildErrorResponse('Book cover not found'));
-  }    // Check if cached cover exists
-    const cachePath = path.join(process.env.COVERS_CACHE_PATH || '/application/cache/covers', `${bookId}.jpg`);
-    
+  // Ensure covers cache directory exists
+  const coversCacheRoot = process.env.COVERS_CACHE_PATH || '/app/cache/covers';
+  await ensureDir(coversCacheRoot);
+
+  // Serve from cache if present (any supported extension)
+  const cached = await findCachedImage(coversCacheRoot, String(bookId));
+  if (cached) { return res.sendFile(cached); }
+
+  if (bookCover) {
+    // Try lib.b.attached.zip exact path
+    const zipPath = path.join(process.env.CACHE_PATH || '/app/cache', 'lib.b.attached.zip');
     try {
-      await fs.access(cachePath);
-      // Serve cached cover
-      res.sendFile(cachePath);
-    } catch (error) {
-      // Try to extract from ZIP archive
-      const zipPath = path.join(process.env.CACHE_PATH || '/application/cache', 'lib.b.attached.zip');
-      
-      try {
-        await fs.access(zipPath);
-        const zip = new AdmZip(zipPath);
-        const zipEntries = zip.getEntries();
-        
-        const coverEntry = zipEntries.find(entry => 
-          entry.entryName.includes(bookCover.file)
-        );
-
-        if (!coverEntry) {
-          return res.status(404).json(buildErrorResponse('Book cover not found in archive'));
-        }
-
-        // Process and cache the cover
-        const coverBuffer = coverEntry.getData();
-        // Temporarily disable sharp processing for ARM64 compatibility
-        // const processedCover = await sharp(coverBuffer)
-        //   .resize(300, 400, { fit: 'inside' })
-        //   .jpeg({ quality: 85 })
-        //   .toBuffer();
-        const processedCover = coverBuffer; // Serve original cover for now
-
-        // Save to cache
-        await fs.writeFile(cachePath, processedCover);
-
-        // Set headers and send
-        res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
-        res.send(processedCover);
-      } catch (zipError) {
-        return res.status(404).json(buildErrorResponse('Book cover archive not found'));
-      }
+      await fs.access(zipPath);
+      const coverBuffer = await extractZipEntry(zipPath, bookCover.file);
+      const ext = detectImageExt(coverBuffer) || 'jpg';
+      const cachePath = path.join(coversCacheRoot, `${bookId}.${ext}`);
+      await fs.writeFile(cachePath, coverBuffer);
+      res.setHeader('Content-Type', imageContentType(ext));
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
+      return res.send(coverBuffer);
+    } catch (zipError) {
+      // fall through to book-file extraction
     }
+  }
+
+  // Fallback: extract cover from the book file itself (fb2/epub)
+  try {
+    // Get book record for type hints
+    const book = await getRow(`SELECT filetype FROM libbook WHERE bookid = $1 LIMIT 1`, [bookId]);
+    const requestedType = (book?.filetype || '').toString();
+    const { entryName, entryBuffer } = await getBookZipEntry(bookId, requestedType);
+    const nameLower = entryName.toLowerCase();
+    let buf: Buffer | null = null;
+    if (nameLower.endsWith('.fb2') || nameLower.endsWith('.xml')) {
+      buf = extractCoverFromFb2(entryBuffer);
+    } else if (nameLower.endsWith('.epub')) {
+      buf = extractCoverFromEpub(entryBuffer);
+    }
+    if (buf && buf.length > 32) {
+      const ext = detectImageExt(buf) || 'jpg';
+      const cachePath = path.join(coversCacheRoot, `${bookId}.${ext}`);
+      await fs.writeFile(cachePath, buf);
+      res.setHeader('Content-Type', imageContentType(ext));
+      res.setHeader('Cache-Control', 'public, max-age=31536000');
+      return res.send(buf);
+    }
+  } catch (fallbackErr) {
+    // ignore; will 404 below
+  }
+
+  return res.status(404).json(buildErrorResponse('Book cover not found'));
 }));
 
 // Helper function to get content type

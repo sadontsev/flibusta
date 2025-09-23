@@ -7,6 +7,7 @@ import { createWriteStream } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import logger from '../utils/logger';
+import { v4 as uuidv4 } from 'uuid';
 
 const execAsync = promisify(exec);
 
@@ -25,6 +26,23 @@ interface UpdateStatus {
     isRunning: boolean;
     lastUpdate?: Date;
     currentOperation?: string;
+    progress?: OperationProgress;
+}
+
+type OperationType = 'sql' | 'daily' | 'covers' | 'mappings' | 'full';
+
+interface OperationProgress {
+    id: string;
+    type: OperationType;
+    startedAt: string; // ISO string for easy JSON
+    updatedAt: string;
+    completedAt?: string;
+    currentIndex: number; // 0-based
+    total: number;
+    step: string; // human label
+    successes: number;
+    errors: number;
+    message?: string; // last message
 }
 
 class UpdateService {
@@ -34,8 +52,10 @@ class UpdateService {
     private sqlDir: string;
     private booksDir: string;
     private cacheDir: string;
+    private mappingsSqlPath: string;
     private isRunning: boolean = false;
     private currentOperation: string = '';
+    private progress?: OperationProgress;
 
     constructor() {
         this.baseUrl = 'http://flibusta.is';
@@ -44,6 +64,8 @@ class UpdateService {
         this.sqlDir = process.env.SQL_PATH || '/app/sql';
         this.booksDir = process.env.BOOKS_PATH || '/app/flibusta';
         this.cacheDir = process.env.CACHE_PATH || '/app/cache';
+        // Allow overriding the mappings SQL path; default to container path
+        this.mappingsSqlPath = process.env.MAPPINGS_SQL_PATH || '/app/populate_book_mappings.sql';
     }
 
     async downloadFile(url: string, destination: string): Promise<string> {
@@ -126,9 +148,24 @@ class UpdateService {
         const results: UpdateResult[] = [];
         this.isRunning = true;
         this.currentOperation = 'Updating SQL files';
+        this.progress = {
+            id: uuidv4(),
+            type: 'sql',
+            startedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            currentIndex: 0,
+            total: sqlFiles.length,
+            step: 'Initializing',
+            successes: 0,
+            errors: 0,
+            message: 'Preparing to process SQL files'
+        };
         
         for (const sqlFile of sqlFiles) {
             try {
+                this.progress!.step = 'Downloading';
+                this.progress!.message = `Downloading ${sqlFile}`;
+                this.progress!.updatedAt = new Date().toISOString();
                 const url = `${this.sqlUrl}${sqlFile}`;
                 const destination = path.join(this.sqlDir, sqlFile);
                 
@@ -136,9 +173,15 @@ class UpdateService {
                 await this.downloadFile(url, destination);
                 
                 logger.info(`Extracting ${sqlFile}...`);
+                this.progress!.step = 'Extracting';
+                this.progress!.message = `Extracting ${sqlFile}`;
+                this.progress!.updatedAt = new Date().toISOString();
                 const extractedPath = await this.extractGzipFile(destination);
                 
                 logger.info(`Executing ${extractedPath}...`);
+                this.progress!.step = 'Executing';
+                this.progress!.message = `Executing ${path.basename(extractedPath)}`;
+                this.progress!.updatedAt = new Date().toISOString();
                 const result = await this.executeSqlFile(extractedPath);
                 
                 results.push({
@@ -146,6 +189,7 @@ class UpdateService {
                     status: 'success',
                     message: result.message
                 });
+                this.progress!.successes += 1;
                 
             } catch (error) {
                 results.push({
@@ -153,11 +197,18 @@ class UpdateService {
                     status: 'error',
                     message: (error as Error).message
                 });
+                this.progress!.errors += 1;
             }
+            this.progress!.currentIndex += 1;
+            this.progress!.updatedAt = new Date().toISOString();
         }
         
         this.isRunning = false;
         this.currentOperation = '';
+        if (this.progress) {
+            this.progress.completedAt = new Date().toISOString();
+            this.progress.updatedAt = new Date().toISOString();
+        }
         return results;
     }
 
@@ -169,9 +220,24 @@ class UpdateService {
             // Get the list of daily files
             const dailyFiles = await this.getDailyFileList();
             const results: UpdateResult[] = [];
+            this.progress = {
+                id: uuidv4(),
+                type: 'daily',
+                startedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                currentIndex: 0,
+                total: dailyFiles.length,
+                step: 'Initializing',
+                successes: 0,
+                errors: 0,
+                message: 'Preparing to download daily archives'
+            };
             
             for (const file of dailyFiles) {
                 try {
+                    this.progress!.step = 'Downloading';
+                    this.progress!.message = `Downloading ${file}`;
+                    this.progress!.updatedAt = new Date().toISOString();
                     const url = `${this.dailyUrl}${file}`;
                     const destination = path.join(this.booksDir, file);
                     
@@ -183,6 +249,7 @@ class UpdateService {
                         status: 'success',
                         message: 'Downloaded successfully'
                     });
+                    this.progress!.successes += 1;
                     
                 } catch (error) {
                     results.push({
@@ -190,11 +257,18 @@ class UpdateService {
                         status: 'error',
                         message: (error as Error).message
                     });
+                    this.progress!.errors += 1;
                 }
+                this.progress!.currentIndex += 1;
+                this.progress!.updatedAt = new Date().toISOString();
             }
             
             this.isRunning = false;
             this.currentOperation = '';
+            if (this.progress) {
+                this.progress.completedAt = new Date().toISOString();
+                this.progress.updatedAt = new Date().toISOString();
+            }
             return results;
         } catch (error) {
             this.isRunning = false;
@@ -207,27 +281,86 @@ class UpdateService {
         try {
             this.isRunning = true;
             this.currentOperation = 'Updating covers';
-            
+
             const results: UpdateResult[] = [];
-            
-            // Execute covers update script
+            this.progress = {
+                id: uuidv4(),
+                type: 'covers',
+                startedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                currentIndex: 0,
+                total: 2,
+                step: 'Initializing',
+                successes: 0,
+                errors: 0,
+                message: 'Ensuring cover archives'
+            };
+
+            // Ensure cache directories exist
+            const coversDir = path.join(this.cacheDir, 'covers');
+            const authorsDir = path.join(this.cacheDir, 'authors');
             try {
-                await execAsync('/app/getcovers.sh');
-                results.push({
-                    file: 'covers',
-                    status: 'success',
-                    message: 'Covers updated successfully'
-                });
-            } catch (error) {
-                results.push({
-                    file: 'covers',
-                    status: 'error',
-                    message: (error as Error).message
-                });
+                await fs.mkdir(this.cacheDir, { recursive: true });
+                await fs.mkdir(coversDir, { recursive: true });
+                await fs.mkdir(authorsDir, { recursive: true });
+            } catch (e) {
+                logger.warn('Failed ensuring cache directories (will continue):', (e as Error).message);
             }
-            
+
+            // Define cover archive files
+            const archives = [
+                { name: 'lib.a.attached.zip', url: `${this.sqlUrl}lib.a.attached.zip` },
+                { name: 'lib.b.attached.zip', url: `${this.sqlUrl}lib.b.attached.zip` }
+            ];
+
+            for (const arch of archives) {
+                const dest = path.join(this.cacheDir, arch.name);
+                let action: 'skipped' | 'downloaded' | 'failed' = 'skipped';
+                let message = 'Already present';
+                try {
+                    this.progress!.step = 'Checking';
+                    this.progress!.message = `Checking ${arch.name}`;
+                    this.progress!.updatedAt = new Date().toISOString();
+                    // Check if file exists and is non-empty
+                    let needDownload = false;
+                    try {
+                        const stat = await fs.stat(dest);
+                        if (!stat || stat.size < 1024 * 1024) { // smaller than 1MB is suspicious
+                            needDownload = true;
+                        }
+                    } catch {
+                        needDownload = true;
+                    }
+
+                    if (needDownload) {
+                        logger.info(`Downloading ${arch.name} to ${dest}...`);
+                        this.progress!.step = 'Downloading';
+                        this.progress!.message = `Downloading ${arch.name}`;
+                        this.progress!.updatedAt = new Date().toISOString();
+                        await this.downloadFile(arch.url, dest);
+                        action = 'downloaded';
+                        message = 'Downloaded successfully';
+                    }
+
+                    results.push({ file: arch.name, status: 'success', message });
+                    this.progress!.successes += 1;
+                } catch (err) {
+                    action = 'failed';
+                    message = (err as Error).message;
+                    logger.error(`Failed to ensure ${arch.name}:`, err);
+                    results.push({ file: arch.name, status: 'error', message });
+                    this.progress!.errors += 1;
+                }
+                this.progress!.currentIndex += 1;
+                this.progress!.updatedAt = new Date().toISOString();
+            }
+
             this.isRunning = false;
             this.currentOperation = '';
+            if (this.progress) {
+                this.progress.completedAt = new Date().toISOString();
+                this.progress.updatedAt = new Date().toISOString();
+            }
             return results;
         } catch (error) {
             this.isRunning = false;
@@ -240,11 +373,43 @@ class UpdateService {
         try {
             this.isRunning = true;
             this.currentOperation = 'Updating book mappings';
-            
-            await execAsync('/app/populate_book_mappings.sql');
-            
+            this.progress = {
+                id: uuidv4(),
+                type: 'mappings',
+                startedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                currentIndex: 0,
+                total: 1,
+                step: 'Executing',
+                successes: 0,
+                errors: 0,
+                message: 'Running mappings SQL'
+            };
+
+            // Ensure the SQL file exists
+            try {
+                await fs.access(this.mappingsSqlPath);
+            } catch {
+                this.isRunning = false;
+                this.currentOperation = '';
+                return {
+                    file: 'book_mappings',
+                    status: 'error',
+                    message: `Mappings SQL not found at ${this.mappingsSqlPath}. Set MAPPINGS_SQL_PATH or place the file at that location.`
+                };
+            }
+
+            // Execute using psql (same path as other SQL files)
+            await this.executeSqlFile(this.mappingsSqlPath);
+            this.progress.successes = 1;
+            this.progress.currentIndex = 1;
+
             this.isRunning = false;
             this.currentOperation = '';
+            if (this.progress) {
+                this.progress.completedAt = new Date().toISOString();
+                this.progress.updatedAt = new Date().toISOString();
+            }
             return {
                 file: 'book_mappings',
                 status: 'success',
@@ -289,6 +454,9 @@ class UpdateService {
         
         if (this.currentOperation) {
             status.currentOperation = this.currentOperation;
+        }
+        if (this.progress) {
+            status.progress = this.progress;
         }
         
         return status;

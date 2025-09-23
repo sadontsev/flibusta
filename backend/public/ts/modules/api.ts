@@ -147,6 +147,7 @@ class APIModuleNG {
   }
 
   async getUpdateStatus() { return await this.apiCall('/api/admin/updates/status', { method: 'GET' }); }
+  async startUpdate(type: 'sql'|'daily'|'covers'|'mappings'|'full') { return await this.apiCall(`/api/admin/updates/run/${type}`, { method: 'POST' }); }
   async updateSqlFiles() { return await this.apiCall('/api/admin/updates/sql', { method: 'POST' }); }
   async updateDailyBooks() { return await this.apiCall('/api/admin/updates/daily', { method: 'POST' }); }
   async updateCovers() { return await this.apiCall('/api/admin/updates/covers', { method: 'POST' }); }

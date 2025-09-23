@@ -67,6 +67,59 @@ router.get('/dashboard', requireAuth, requireAdmin, async (req, res) => {
     }
 });
 
+// Get update status (lightweight, for polling)
+router.get('/updates/status', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const updateStatus = await updateService.getUpdateStatus();
+        res.json({ success: true, data: updateStatus });
+    } catch (error) {
+        logger.error('Error getting update status:', error);
+        res.status(500).json({ success: false, error: (error as Error).message });
+    }
+});
+
+// Start an update asynchronously so UI can poll progress
+router.post('/updates/run/:type', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const type = (req.params as { type?: string }).type as string;
+        const allowed = new Set(['sql','daily','covers','mappings','full']);
+        if (!type || !allowed.has(type)) {
+            res.status(400).json({ success: false, error: 'Invalid update type' });
+            return;
+        }
+
+        const status = await updateService.getUpdateStatus();
+        if (status.isRunning) {
+            res.status(409).json({ success: false, error: 'Another update is already running' });
+            return;
+        }
+
+        // Fire and forget
+        (async () => {
+            try {
+                if (type === 'sql') await updateService.updateSqlFiles();
+                else if (type === 'daily') await updateService.updateDailyBooks();
+                else if (type === 'covers') await updateService.updateCovers();
+                else if (type === 'mappings') await updateService.updateBookMappings();
+                else if (type === 'full') {
+                    // Sequential full run
+                    try { await updateService.updateSqlFiles(); } catch (e) { logger.error('Full run: SQL error', e); }
+                    try { await updateService.updateDailyBooks(); } catch (e) { logger.error('Full run: daily error', e); }
+                    try { await updateService.updateCovers(); } catch (e) { logger.error('Full run: covers error', e); }
+                    try { await updateService.updateBookMappings(); } catch (e) { logger.error('Full run: mappings error', e); }
+                }
+            } catch (err) {
+                logger.error(`Async update ${type} failed:`, err);
+            }
+        })();
+
+        res.json({ success: true, data: { started: true, type } });
+    } catch (error) {
+        logger.error('Error starting async update:', error);
+        res.status(500).json({ success: false, error: (error as Error).message });
+    }
+});
+
 // Update SQL files
 router.post('/updates/sql', requireAuth, requireAdmin, async (req, res) => {
     try {

@@ -208,11 +208,12 @@ export interface UpdateHistoryRecord {
   started_at: Date;
   completed_at?: Date;
   duration_seconds?: number;
-  processed_files?: number;
-  successful_files?: number;
-  failed_files?: number;
+  files_processed?: number;
+  files_successful?: number;
+  files_failed?: number;
   error_message?: string;
-  operation_details?: Record<string, unknown>;
+  details?: Record<string, unknown>;
+  created_at?: Date;
 }
 
 export interface UpdateStatsRecord {
