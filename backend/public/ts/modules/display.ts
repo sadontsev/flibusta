@@ -6,7 +6,7 @@ class DisplayModuleNG {
   generatePlaceholderSVG(title: string) {
     const shortTitle = title.substring(0, 20);
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(`
-      <svg width="200" height="300" xmlns="http://www.w3.org/2000/svg">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300" preserveAspectRatio="xMidYMid meet">
         <rect width="200" height="300" fill="#374151"/>
         <rect x="10" y="10" width="180" height="280" fill="#4B5563" stroke="#6B7280" stroke-width="2"/>
         <text x="100" y="150" font-family="Arial, sans-serif" font-size="14" fill="#FFFFFF" text-anchor="middle" dominant-baseline="middle">${shortTitle}</text>
@@ -23,7 +23,7 @@ class DisplayModuleNG {
       const formatBadge = book.filetype ? `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${book.filetype.toUpperCase()}</span>` : '';
       const coverUrl = book.cover_url || this.generatePlaceholderSVG(book.title);
       const fileSize = book.filesize ? (parseInt(book.filesize) / 1024 / 1024).toFixed(1) + ' MB' : '';
-  html += `<div class="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"><div class="relative bg-gray-900"><img src="${coverUrl}" alt="${book.title}" class="w-full h-64 object-contain" onerror="this.src='${this.generatePlaceholderSVG(book.title)}'"><div class="absolute top-2 right-2">${formatBadge}</div></div><div class="p-4"><h3 class="text-lg font-semibold text-white mb-2 line-clamp-2" title="${book.title}">${book.title}</h3><p class="text-gray-300 text-sm mb-2">${authorName}</p><div class="flex items-center justify-between text-sm text-gray-400 mb-3"><span>${book.year || 'Год не указан'}</span><span>${fileSize}</span></div><button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105" onclick="app.showBookDetails('${book.bookid}')"><i class="fas fa-eye mr-2"></i>Подробнее</button></div></div>`;
+  html += `<div class="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"><div class="relative bg-gray-900 cover-aspect"><img src="${coverUrl}" alt="${book.title}" class="w-full h-full object-contain" onerror="this.src='${this.generatePlaceholderSVG(book.title)}'"><div class="absolute top-2 right-2">${formatBadge}</div></div><div class="p-4"><h3 class="text-lg font-semibold text-white mb-2 line-clamp-2" title="${book.title}">${book.title}</h3><p class="text-gray-300 text-sm mb-2">${authorName}</p><div class="flex items-center justify-between text-sm text-gray-400 mb-3"><span>${book.year || 'Год не указан'}</span><span>${fileSize}</span></div><button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105" onclick="app.showBookDetails('${book.bookid}')"><i class="fas fa-eye mr-2"></i>Подробнее</button></div></div>`;
     });
     html += '</div>'; this.app.ui.setContent(html);
   }
@@ -165,7 +165,7 @@ class DisplayModuleNG {
       const coverUrl = book.cover_url || this.generatePlaceholderSVG(book.title || '');
       const size = book.filesize ? (parseInt(book.filesize, 10) / 1024 / 1024).toFixed(1) + ' MB' : '';
       const fmt = book.filetype ? `<span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800\">${String(book.filetype).toUpperCase()}</span>` : '';
-  html += `<div class="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"><div class="relative bg-gray-900"><img src="${coverUrl}" alt="${book.title || ''}" class="w-full h-64 object-contain" onerror="this.src='${this.generatePlaceholderSVG(book.title || '')}'"><div class="absolute top-2 right-2">${fmt}</div></div><div class="p-4"><h3 class="text-lg font-semibold text-white mb-2 line-clamp-2" title="${book.title || ''}">${book.title || ''}</h3><p class="text-gray-300 text-sm mb-2">${authorName || 'Неизвестный автор'}</p><div class="flex items-center justify-between text-sm text-gray-400 mb-3"><span>${book.year || 'Год не указан'}</span><span>${size}</span></div><button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105" onclick="app.showBookDetails('${book.bookid}')"><i class="fas fa-eye mr-2"></i>Подробнее</button></div></div>`;
+  html += `<div class="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden"><div class="relative bg-gray-900 cover-aspect"><img src="${coverUrl}" alt="${book.title || ''}" class="w-full h-full object-contain" onerror="this.src='${this.generatePlaceholderSVG(book.title || '')}'"><div class="absolute top-2 right-2">${fmt}</div></div><div class="p-4"><h3 class="text-lg font-semibold text-white mb-2 line-clamp-2" title="${book.title || ''}">${book.title || ''}</h3><p class="text-gray-300 text-sm mb-2">${authorName || 'Неизвестный автор'}</p><div class="flex items-center justify-between text-sm text-gray-400 mb-3"><span>${book.year || 'Год не указан'}</span><span>${size}</span></div><button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105" onclick="app.showBookDetails('${book.bookid}')"><i class="fas fa-eye mr-2"></i>Подробнее</button></div></div>`;
     });
     html += '</div>';
     this.app.ui.setContent(html);
@@ -226,7 +226,9 @@ class DisplayModuleNG {
     const html = `
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div>
-          <img src="${coverUrl}" alt="${book.title}" class="w-full rounded-lg shadow-lg object-contain bg-gray-900" onerror="this.src='${this.generatePlaceholderSVG(book.title || '')}'">
+          <div class="bg-gray-900 rounded-lg shadow-lg cover-aspect">
+            <img src="${coverUrl}" alt="${book.title}" class="w-full h-full object-contain" onerror="this.src='${this.generatePlaceholderSVG(book.title || '')}'">
+          </div>
         </div>
         <div class="md:col-span-2">
           <h1 class="text-3xl font-bold text-white mb-2">${book.title || 'Без названия'}</h1>

@@ -597,3 +597,8 @@ img[src*="data:image/svg+xml"] {
 .tiles-sm .tile-cover { height: 8rem; }
 .tiles-md .tile-cover { height: 16rem; }
 .tiles-lg .tile-cover { height: 24rem; }
+
+/* Enforce consistent 2:3 aspect ratio wrappers where needed (details page, etc.) */
+.cover-aspect {
+    aspect-ratio: 2 / 3;
+}
