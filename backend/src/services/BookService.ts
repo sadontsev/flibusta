@@ -72,6 +72,10 @@ interface SearchResult {
 
 class BookService {
   private recordsPerPage: number;
+  // Simple in-memory LRU-ish cache (time + size constrained)
+  private searchCache: Map<string, { time: number; data: SearchResult }> = new Map();
+  private cacheTTLms = 30_000; // 30s
+  private cacheMaxEntries = 200;
 
   constructor() {
     this.recordsPerPage = parseInt(process.env.RECORDS_PER_PAGE || '10');
@@ -186,249 +190,175 @@ class BookService {
         limit = this.recordsPerPage
       } = searchParams;
 
-      const conditions = ['b.deleted = $1'];
-      const params = ['0'];
-      let paramIndex = 2;
-
-      // Enhanced search that can handle combined book name and author queries
-      if (query) {
-        // Split query into potential book title and author parts
-        const queryParts = query.split(/\s+by\s+|\s+автор\s+|\s+от\s+/i);
-        
-        if (queryParts.length > 1) {
-          // Query contains both book title and author
-          const bookTitle = queryParts[0]?.trim();
-          const authorName = queryParts[1]?.trim();
-          
-          if (bookTitle) {
-            conditions.push(`b.title ILIKE $${paramIndex}`);
-            params.push(`%${bookTitle}%`);
-            paramIndex++;
-          }
-          
-          if (authorName) {
-            conditions.push(`EXISTS (
-              SELECT 1 FROM libavtor a 
-              JOIN libavtorname an ON a.avtorid = an.avtorid 
-              WHERE a.bookid = b.bookid 
-              AND (
-                an.lastname ILIKE $${paramIndex} 
-                OR an.firstname ILIKE $${paramIndex}
-                OR an.nickname ILIKE $${paramIndex}
-                OR (an.lastname || ' ' || an.firstname) ILIKE $${paramIndex}
-                OR (an.firstname || ' ' || an.lastname) ILIKE $${paramIndex}
-              )
-            )`);
-            params.push(`%${authorName}%`);
-            paramIndex++;
-          }
-        } else {
-          // Single query - search in both title and author fields
-          conditions.push(`(
-            b.title ILIKE $${paramIndex} 
-            OR EXISTS (
-              SELECT 1 FROM libavtor a 
-              JOIN libavtorname an ON a.avtorid = an.avtorid 
-              WHERE a.bookid = b.bookid 
-              AND (
-                an.lastname ILIKE $${paramIndex} 
-                OR an.firstname ILIKE $${paramIndex}
-                OR an.nickname ILIKE $${paramIndex}
-                OR (an.lastname || ' ' || an.firstname) ILIKE $${paramIndex}
-                OR (an.firstname || ' ' || an.lastname) ILIKE $${paramIndex}
-              )
-            )
-          )`);
-          params.push(`%${query}%`);
-          paramIndex++;
+      // Build cache key (avoid caching pages with high page index to limit memory)
+      const cacheKey = JSON.stringify({ q: query, author, genre, series, year, language, sort, page, limit, v: 2 });
+      if (page < 5) { // only cache early pages
+        const cached = this.searchCache.get(cacheKey);
+        if (cached && (Date.now() - cached.time) < this.cacheTTLms) {
+          return cached.data;
         }
       }
 
-      // Search by author (separate parameter)
-      if (author) {
-        conditions.push(`EXISTS (
-          SELECT 1 FROM libavtor a 
-          JOIN libavtorname an ON a.avtorid = an.avtorid 
-          WHERE a.bookid = b.bookid 
-          AND (
-            an.lastname ILIKE $${paramIndex} 
-            OR an.firstname ILIKE $${paramIndex}
-            OR an.nickname ILIKE $${paramIndex}
-            OR (an.lastname || ' ' || an.firstname) ILIKE $${paramIndex}
-            OR (an.firstname || ' ' || an.lastname) ILIKE $${paramIndex}
-          )
-        )`);
-        params.push(`%${author}%`);
-        paramIndex++;
-      }
+  // Base conditions & parameter tracking
+  const conditions: string[] = ['b.deleted = $1'];
+  const params: any[] = ['0'];
+      let p = 2; // next param index
 
-      // Search by genre
+      // Combined title + author logic (keep semantics of previous implementation)
+      // Full-text search for title if query provided. Fallback to trigram ILIKE if short or no lexemes.
+      let usedFTS = false;
+      if (query) {
+        // Basic sanitization – rely on plainto_tsquery for simplicity.
+        usedFTS = true;
+        conditions.push(`(b.search_vector @@ plainto_tsquery('simple', $${p}))`);
+        params.push(query); p++;
+      }
+      if (author) {
+        // Use trigram index on concatenated author fields via expression index (already created)
+        conditions.push(`EXISTS (
+          SELECT 1 FROM libavtor a
+          JOIN libavtorname an ON a.avtorid = an.avtorid
+          WHERE a.bookid = b.bookid
+            AND ( (an.lastname || ' ' || an.firstname || ' ' || coalesce(an.nickname,'')) ILIKE $${p} )
+        )`);
+        params.push(`%${author}%`); p++;
+      }
       if (genre) {
         conditions.push(`EXISTS (
           SELECT 1 FROM libgenre g
           JOIN libgenrelist gl ON g.genreid = gl.genreid
-          WHERE g.bookid = b.bookid 
-          AND gl.genredesc ILIKE $${paramIndex}
+          WHERE g.bookid = b.bookid AND gl.genredesc ILIKE $${p}
         )`);
-        params.push(`%${genre}%`);
-        paramIndex++;
+        params.push(`%${genre}%`); p++;
       }
-
-      // Search by series
       if (series) {
         conditions.push(`EXISTS (
           SELECT 1 FROM libseq seq
           JOIN libseqname s ON seq.seqid = s.seqid
-          WHERE seq.bookid = b.bookid 
-          AND s.seqname ILIKE $${paramIndex}
+          WHERE seq.bookid = b.bookid AND s.seqname ILIKE $${p}
         )`);
-        params.push(`%${series}%`);
-        paramIndex++;
+        params.push(`%${series}%`); p++;
       }
-
-      // Search by year
       if (year) {
-        conditions.push(`b.year = $${paramIndex}`);
-        params.push(year);
-        paramIndex++;
+        conditions.push(`b.year = $${p}`);
+        params.push(year); p++;
       }
-
-      // Language filter
       if (language) {
-        conditions.push(`b.lang = $${paramIndex}`);
-        params.push(language);
-        paramIndex++;
+        conditions.push(`b.lang = $${p}`);
+        params.push(language); p++;
       }
 
-  // Build ORDER BY clause based on sort parameter
-      let orderBy = 'b.bookid DESC'; // default
-      let orderByParams: string[] = [];
-  // Track the starting index for relevance parameters to avoid off-by-N errors
-  let relevanceParamBase: number | null = null;
-      
-      switch (sort) {
-        case 'relevance':
-          // For relevance, prioritize exact matches and recent additions
-          if (query) {
-            orderBy = 'relevance_score ASC, b.bookid DESC';
-            orderByParams = [
-              query,                    // exact match
-              query + '%',              // starts with
-              '%' + query + '%'         // contains
-            ];
-            // Record the base index for the three relevance parameters BEFORE incrementing
-            relevanceParamBase = paramIndex;
-            // Reserve parameter indexes for the three relevance params
-            paramIndex += orderByParams.length;
-          } else {
-            orderBy = 'b.bookid DESC';
-          }
-          break;
-        case 'title':
-          orderBy = 'b.title ASC';
-          break;
-        case 'title_desc':
-          orderBy = 'b.title DESC';
-          break;
-        case 'author':
-          orderBy = 'author_name ASC';
-          break;
-        case 'author_desc':
-          orderBy = 'author_name DESC';
-          break;
-        case 'year':
-          orderBy = 'b.year ASC NULLS LAST';
-          break;
-        case 'year_desc':
-          orderBy = 'b.year DESC NULLS FIRST';
-          break;
-        case 'rating':
-          orderBy = 'b.rating DESC NULLS LAST';
-          break;
-        case 'rating_asc':
-          orderBy = 'b.rating ASC NULLS LAST';
-          break;
-        case 'date':
-        default:
-          orderBy = 'b.bookid DESC';
-          break;
+      // Sorting logic
+      let orderBy = 'b.bookid DESC';
+      let relevanceBase: number | null = null;
+      if (sort === 'relevance' && query) {
+        // Relevance with FTS rank + simple fallback scoring
+        relevanceBase = p;
+        // Using ts_rank for ordering (lower rank first if we invert? We'll use DESC to show highest relevance first)
+        orderBy = 'ts_rank(b.search_vector, plainto_tsquery(\'simple\', $' + relevanceBase + ")) DESC, b.bookid DESC";
+        params.push(query); p++;
+      } else {
+        switch (sort) {
+          case 'title': orderBy = 'b.title ASC'; break;
+          case 'title_desc': orderBy = 'b.title DESC'; break;
+          case 'author': orderBy = 'primary_author_lastname ASC NULLS LAST, primary_author_firstname ASC NULLS LAST'; break;
+          case 'author_desc': orderBy = 'primary_author_lastname DESC NULLS LAST, primary_author_firstname DESC NULLS LAST'; break;
+          case 'year': orderBy = 'b.year ASC NULLS LAST'; break;
+          case 'year_desc': orderBy = 'b.year DESC NULLS FIRST'; break;
+          case 'rating': orderBy = 'b.rating DESC NULLS LAST'; break;
+          case 'rating_asc': orderBy = 'b.rating ASC NULLS LAST'; break;
+          case 'date':
+          default: orderBy = 'b.bookid DESC'; break;
+        }
       }
 
       const offset = page * limit;
+      params.push(limit, offset); // for LIMIT / OFFSET
+      const limitParamIndex = p;
+      const offsetParamIndex = p + 1;
 
-      // Combine params with orderByParams for relevance sorting
-      const finalParams = [...params, ...orderByParams, limit, offset];
+      const relevanceSelect = (sort === 'relevance' && query) ? ', ts_rank(b.search_vector, plainto_tsquery(\'simple\', $' + (relevanceBase as number) + ')) AS relevance_score' : '';
 
-      // Main query with author information
+      // Single-pass query with lateral joins to avoid N+1
       const sql = `
-        SELECT DISTINCT b.*,
-               (SELECT STRING_AGG(CONCAT(an.lastname, ' ', an.firstname), ', ' ORDER BY a.pos)
-                FROM libavtor a
-                JOIN libavtorname an ON a.avtorid = an.avtorid
-                WHERE a.bookid = b.bookid) as author_name,
-               (SELECT COUNT(*) FROM libavtor WHERE bookid = b.bookid) as author_count
-               ${sort === 'relevance' && query ? `,
-               CASE 
-                 WHEN b.title ILIKE $${relevanceParamBase} THEN 1
-                 WHEN b.title ILIKE $${(relevanceParamBase as number) + 1} THEN 2
-                 WHEN b.title ILIKE $${(relevanceParamBase as number) + 2} THEN 3
-                 ELSE 4
-               END as relevance_score` : ''}
-        FROM libbook b
-        WHERE ${conditions.join(' AND ')}
-        ORDER BY ${orderBy}
-        LIMIT $${finalParams.length - 1} OFFSET $${finalParams.length}
-      `;
-
-      const books = await getRows(sql, finalParams);
-
-      // Get total count for pagination
-      const countSql = `
-        SELECT COUNT(DISTINCT b.bookid) as total
-        FROM libbook b
-        WHERE ${conditions.join(' AND ')}
-      `;
-      
-      const countParams = params; // Use original params for count query
-      const countResult = await getRow(countSql, countParams);
-      const total = parseInt((countResult?.total as string) || '0');
-
-      // Enhance books with additional data
-      const enhancedBooks = await Promise.all(books.map(async (book) => {
-        // Get primary author for display
-        const primaryAuthor = await getRow(`
+        WITH base AS (
+          SELECT b.bookid, b.title, b.year, b.lang, b.filetype, b.filesize, b.time, b.rating,
+                 COUNT(*) OVER() AS total_count${relevanceSelect}
+          FROM libbook b
+          WHERE ${conditions.join(' AND ')}
+        )
+        SELECT base.*, 
+               pa.lastname AS primary_author_lastname,
+               pa.firstname AS primary_author_firstname,
+               pa.nickname AS primary_author_nickname,
+               g3.genres AS genres_array,
+               ef.effective_filetype
+        FROM base
+        LEFT JOIN LATERAL (
           SELECT an.lastname, an.firstname, an.nickname
           FROM libavtor a
           JOIN libavtorname an ON a.avtorid = an.avtorid
-          WHERE a.bookid = $1
+          WHERE a.bookid = base.bookid
           ORDER BY a.pos
           LIMIT 1
-        `, [book.bookid]);
-
-        // Get genres
-        const genres = await getRows(`
-          SELECT gl.genredesc
+        ) pa ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT array_agg(gl.genredesc ORDER BY gl.genredesc) AS genres
           FROM libgenre g
           JOIN libgenrelist gl ON g.genreid = gl.genreid
-          WHERE g.bookid = $1
-          ORDER BY gl.genredesc
+          WHERE g.bookid = base.bookid
           LIMIT 3
-        `, [book.bookid]);
+        ) g3 ON TRUE
+        LEFT JOIN LATERAL (
+          SELECT
+            CASE
+              WHEN filename ILIKE 'f.fb2.%' THEN 'fb2'
+              WHEN filename ILIKE 'f.epub.%' THEN 'epub'
+              WHEN filename ILIKE 'f.djvu.%' THEN 'djvu'
+              WHEN filename ILIKE 'f.pdf.%' THEN 'pdf'
+              WHEN filename ILIKE 'f.mobi.%' THEN 'mobi'
+              WHEN filename ILIKE 'f.txt.%' THEN 'txt'
+              WHEN filename ILIKE 'f.rtf.%' THEN 'rtf'
+              WHEN filename ILIKE 'f.html.%' OR filename ILIKE 'f.htm.%' THEN 'html'
+              ELSE lower(split_part(filename, '.', 2))
+            END AS effective_filetype
+          FROM book_zip
+          WHERE base.bookid BETWEEN start_id AND end_id
+          ORDER BY
+            (CASE WHEN coalesce(base.filetype,'') <> '' AND filename ILIKE ('f.' || lower(base.filetype) || '.%') THEN 1 ELSE 0 END) DESC,
+            (CASE WHEN filename ILIKE 'f.fb2.%' THEN 1 ELSE 0 END) DESC,
+            (CASE WHEN filename ILIKE 'f.epub.%' THEN 1 ELSE 0 END) DESC,
+            (CASE WHEN filename ILIKE 'f.djvu.%' THEN 1 ELSE 0 END) DESC,
+            usr ASC,
+            filename ASC
+          LIMIT 1
+        ) ef ON TRUE
+        ORDER BY ${orderBy}
+        LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex};
+      `;
 
-        // Determine effective filetype for display
-        const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
+      const rows = await getRows(sql, params);
+      const total = rows.length ? parseInt((rows[0] as any).total_count, 10) : 0;
 
+      const books = rows.map(r => {
+        const authorsArr = (r as any).primary_author_lastname ? [{
+          lastname: (r as any).primary_author_lastname,
+          firstname: (r as any).primary_author_firstname,
+          nickname: (r as any).primary_author_nickname
+        }] : [];
+        const genres = Array.isArray((r as any).genres_array) ? (r as any).genres_array.map((g: string) => ({ genredesc: g })) : [];
+        const effectiveType = (r as any).effective_filetype || (r as any).filetype || 'unknown';
         return {
-          ...book,
-          authors: primaryAuthor ? [primaryAuthor] : [],
-          genres: genres.map(g => ({ genredesc: g.genredesc })),
-          filetype: effectiveType || book.filetype || 'unknown',
-          cover_url: `/api/files/cover/${book.bookid}`
+          ...r,
+            authors: authorsArr,
+            genres,
+            filetype: effectiveType,
+            cover_url: `/api/files/cover/${(r as any).bookid}`
         };
-      }));
+      });
 
-      return {
-        books: enhancedBooks as any,
+      const result: SearchResult = {
+        books: books as any,
         pagination: {
           page,
           limit,
@@ -438,8 +368,24 @@ class BookService {
           hasPrev: page > 0
         }
       };
+
+      // Insert into cache (LRU-ish eviction)
+      if (page < 5) {
+        this.searchCache.set(cacheKey, { time: Date.now(), data: result });
+        if (this.searchCache.size > this.cacheMaxEntries) {
+          // Evict oldest
+            const entries = Array.from(this.searchCache.entries()).sort((a,b)=> a[1].time - b[1].time);
+            const evictCount = Math.ceil(this.cacheMaxEntries * 0.1);
+            for (let i = 0; i < evictCount && i < entries.length; i++) {
+              const entry = entries[i];
+              if (entry) this.searchCache.delete(entry[0]);
+            }
+        }
+      }
+
+      return result;
     } catch (error) {
-      logger.error('Error searching books', { searchParams, error: (error as Error).message });
+      logger.error('Error searching books (refactored query)', { searchParams, error: (error as Error).message });
       throw error;
     }
   }

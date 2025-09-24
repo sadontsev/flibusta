@@ -213,10 +213,78 @@ async function createSearchVectorsColumn(): Promise<void> {
             CREATE INDEX IF NOT EXISTS idx_libbook_search_vector ON libbook USING gin(search_vector);
         `);
 
+        // Populate existing rows if vector is null (idempotent-ish)
+        await query(`UPDATE libbook SET search_vector = to_tsvector('simple', coalesce(title,'')) WHERE search_vector IS NULL;`);
+
+        // Create or replace trigger to maintain search_vector on title changes
+        await query(`
+            CREATE OR REPLACE FUNCTION libbook_search_vector_refresh() RETURNS trigger AS $$
+            BEGIN
+                NEW.search_vector := to_tsvector('simple', coalesce(NEW.title,''));
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql;
+        `);
+        await query(`
+            DROP TRIGGER IF EXISTS trg_libbook_search_vector_refresh ON libbook;
+            CREATE TRIGGER trg_libbook_search_vector_refresh
+            BEFORE INSERT OR UPDATE OF title ON libbook
+            FOR EACH ROW EXECUTE FUNCTION libbook_search_vector_refresh();
+        `);
+
         logger.info('Search vectors column added successfully');
     } catch (error) {
         logger.error('Error adding search vectors column:', error);
         throw error;
+    }
+}
+
+// Performance / indexing improvements for search & range lookups
+async function createPerformanceIndexes(): Promise<void> {
+    try {
+        // pg_trgm extension for fast ILIKE / trigram searches
+        await query(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`);
+
+        // Title trigram index (ILIKE '%term%')
+        await query(`CREATE INDEX IF NOT EXISTS idx_libbook_title_trgm ON libbook USING gin (title gin_trgm_ops);`);
+
+        // Author name aggregated trigram index (lastname + firstname + nickname)
+        // Using an expression index; coalesce to avoid null concatenation issues
+        await query(`CREATE INDEX IF NOT EXISTS idx_libavtorname_full_trgm ON libavtorname USING gin ((coalesce(lastname,'') || ' ' || coalesce(firstname,'') || ' ' || coalesce(nickname,'')) gin_trgm_ops);`);
+
+        // Indexes to accelerate EXISTS subqueries by bookid
+        await query(`CREATE INDEX IF NOT EXISTS idx_libavtor_bookid ON libavtor(bookid);`);
+        await query(`CREATE INDEX IF NOT EXISTS idx_libgenre_bookid ON libgenre(bookid);`);
+        await query(`CREATE INDEX IF NOT EXISTS idx_libseq_bookid ON libseq(bookid);`);
+
+        // Composite start/end index for BETWEEN lookups on book_zip (fallback if range/GiST not supported)
+        await query(`CREATE INDEX IF NOT EXISTS idx_book_zip_start_end ON book_zip(start_id, end_id);`);
+
+        // Range / GiST optimization (Postgres 12+). Wrap in DO block to ignore errors if already present / older versions
+        await query(`
+            DO $$
+            BEGIN
+                BEGIN
+                    ALTER TABLE book_zip ADD COLUMN id_range int4range GENERATED ALWAYS AS (int4range(start_id, end_id, '[]')) STORED;
+                EXCEPTION WHEN duplicate_column THEN
+                    -- ignore
+                END;
+                BEGIN
+                    CREATE INDEX IF NOT EXISTS idx_book_zip_id_range_gist ON book_zip USING gist (id_range);
+                EXCEPTION WHEN undefined_object THEN
+                    -- gist or range type unsupported; ignore
+                END;
+            END$$;`);
+
+        // (Future) Materialized view for effective filetype could be added here
+        // Left as documentation placeholder
+        // Example idea:
+        // CREATE MATERIALIZED VIEW book_effective_filetype AS
+        // SELECT b.bookid, ( ... logic selecting preferred mapping ... ) AS effective_filetype FROM libbook b;
+
+    } catch (error) {
+        // Non-fatal: log and continue so core migrations still succeed
+        console.error('Performance index creation failed (non-fatal):', (error as Error).message);
     }
 }
 
@@ -233,6 +301,7 @@ async function runMigrations(): Promise<MigrationResult> {
         await createUpdateHistoryTable();
         await createUpdateSchedulesTable();
         await createSearchVectorsColumn();
+    await createPerformanceIndexes();
 
         logger.info('✅ All migrations completed successfully');
         
