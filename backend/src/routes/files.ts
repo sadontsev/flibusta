@@ -18,10 +18,22 @@ const router = express.Router();
 const execFileAsync = promisify(execFile);
 
 async function extractZipEntry(zipPath: string, internalPath: string): Promise<Buffer> {
-  // Use system unzip to stream a single entry; avoids loading huge ZIP into memory
-  // BusyBox unzip supports -p
-  const { stdout } = await execFileAsync('unzip', ['-p', zipPath, internalPath], { encoding: 'buffer', maxBuffer: 1024 * 1024 * 50 });
-  return stdout as unknown as Buffer;
+  // Prefer system unzip to stream a single entry; avoids loading huge ZIP into memory
+  // BusyBox unzip supports -p; fall back to AdmZip if unzip is missing or fails
+  try {
+    const { stdout } = await execFileAsync('unzip', ['-p', zipPath, internalPath], { encoding: 'buffer', maxBuffer: 1024 * 1024 * 100 });
+    if (stdout && (stdout as any).length) {
+      return stdout as unknown as Buffer;
+    }
+  } catch (e) {
+    // will fallback below
+  }
+  // Fallback: read using AdmZip (loads central directory and target entry only)
+  const zip = new AdmZip(zipPath);
+  const entries = zip.getEntries();
+  const target = entries.find(e => e.entryName === internalPath || e.entryName.endsWith('/' + internalPath));
+  if (!target) throw new Error(`Entry not found in zip: ${internalPath}`);
+  return target.getData();
 }
 
 // Helper: ensure directory exists
@@ -212,7 +224,10 @@ export function extractCoverFromEpub(epubBuffer: Buffer): Buffer | null {
   try {
     const zip = new AdmZip(epubBuffer);
     const entries = zip.getEntries();
-    const getEntry = (name: string) => entries.find(e => e.entryName.toLowerCase() === name.toLowerCase());
+    const getEntry = (name: string) => {
+      const n = name.replace(/\\/g, '/');
+      return entries.find(e => e.entryName.toLowerCase() === n.toLowerCase());
+    };
     const readText = (e: any) => e ? e.getData().toString('utf8') : '';
 
     // Find OPF via META-INF/container.xml
@@ -241,18 +256,23 @@ export function extractCoverFromEpub(epubBuffer: Buffer): Buffer | null {
           const guideMatch = opfXml.match(/<reference[^>]*type=["']cover["'][^>]*href=["']([^"']+)["'][^>]*>/i);
           if (guideMatch) coverHref = guideMatch[1];
         }
+        if (!coverHref) {
+          // Sometimes items use properties="cover-image" in EPUB3
+          const propsMatch = opfXml.match(/<item[^>]*properties=["'][^"']*cover-image[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>/i);
+          if (propsMatch) coverHref = propsMatch[1];
+        }
         // Resolve path relative to OPF
         if (coverHref) {
           const baseDir = opfPath.split('/').slice(0, -1).join('/');
           const rel = baseDir ? `${baseDir}/${coverHref}` : coverHref;
           const norm = rel.replace(/\\/g, '/');
-          const coverEntry = entries.find(e => e.entryName.toLowerCase() === norm.toLowerCase());
+          const coverEntry = entries.find(e => e.entryName.toLowerCase() === norm.toLowerCase() || e.entryName.toLowerCase().endsWith('/' + norm.toLowerCase()));
           if (coverEntry) return coverEntry.getData();
         }
       }
     }
     // Heuristic fallback: find common cover filenames
-  const candidates = entries.filter(e => /cover\.(jpe?g|png|gif|webp)$/i.test(e.entryName) || /images\/cover/i.test(e.entryName));
+  const candidates = entries.filter(e => /(^|\/)cover\.(jpe?g|png|gif|webp)$/i.test(e.entryName) || /images\/(?:.*)cover/i.test(e.entryName));
   if (candidates.length > 0 && candidates[0]) return candidates[0]!.getData();
     // Fallback: largest image in EPUB
     const imageEntries = entries.filter(e => /(jpe?g|png|gif|webp)$/i.test(e.entryName));

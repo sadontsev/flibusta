@@ -2,12 +2,13 @@ FROM node:18-alpine
 
 # Install system dependencies
 RUN apk add --no-cache \
-    curl \
-    python3 \
-    make \
-    g++ \
-    postgresql-client \
-    && rm -rf /var/cache/apk/*
+  curl \
+  unzip \
+  python3 \
+  make \
+  g++ \
+  postgresql-client \
+  && rm -rf /var/cache/apk/*
 
 # Create app directory
 WORKDIR /app
