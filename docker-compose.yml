@@ -56,11 +56,14 @@ services:
       - SUPERADMIN_PASSWORD=hitthat
       - SUPERADMIN_EMAIL=me@sadontsev.com
       - BCRYPT_ROUNDS=12
+      - CALIBRE_URL=http://calibre:7090
     ports:
       - '27100:3000'
     depends_on:
       postgres:
         condition: service_healthy
+      calibre:
+        condition: service_started
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
@@ -77,4 +80,24 @@ services:
       - '27102:80'
     depends_on:
       - backend
+    restart: unless-stopped
+
+  calibre:
+    build:
+      context: ./calibre
+      dockerfile: Dockerfile
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=UTC
+      - CALIBRE_HTTP_PORT=7090
+    volumes:
+      - ./cache:/config
+    expose:
+      - '7090'
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:7090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped

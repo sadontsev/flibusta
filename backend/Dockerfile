@@ -23,7 +23,7 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     DEBIAN_FRONTEND=noninteractive
 
-# System deps needed for calibre & rendering
+# System deps needed for rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
   curl wget xz-utils ca-certificates fontconfig python3 \
     libx11-6 libnss3 libxrender1 libxext6 libxi6 libglib2.0-0 libgl1 libuuid1 \
@@ -34,14 +34,6 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 RUN npm ci --omit=dev && npm cache clean --force
-
-# Install Calibre (official installer)
-ENV CALIBRE_INSTALL_DIR=/opt/calibre
-RUN wget -O /tmp/linux-installer.sh https://download.calibre-ebook.com/linux-installer.sh \
-  && ln -sf /usr/bin/python3 /usr/bin/python \
-  && bash /tmp/linux-installer.sh install_dir=/opt isolated=true ignore_umask=true \
-  && ln -sf /opt/calibre/ebook-convert /usr/bin/ebook-convert \
-  && rm -f /tmp/linux-installer.sh || true
 
 # Copy build artefacts
 COPY --from=builder /app/dist ./dist
@@ -61,7 +53,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -fsS http://localhost:3000/health || exit 1
 
 ENV ENABLE_CALIBRE=1 \
-    CALIBRE_CONVERSION_TIMEOUT_MS=180000 \
+  CALIBRE_CONVERSION_TIMEOUT_MS=180000 \
     SKIP_DB_INIT=0
 
 CMD ["node", "dist/app.js"]

@@ -3,6 +3,8 @@ import fs from 'fs/promises';
 import AdmZip from 'adm-zip';
 import { parseStringPromise } from 'xml2js';
 import { spawn } from 'child_process';
+import http from 'http';
+import https from 'https';
 import logger from '../utils/logger';
 import { extractCoverFromFb2 } from '../routes/files'; // re-use existing helper
 
@@ -37,6 +39,8 @@ export class ConversionService {
 
   /** Determine if calibre's ebook-convert is available (cached). */
   private async hasCalibre(): Promise<boolean> {
+    // If external Calibre URL provided, treat as available
+    if (process.env.CALIBRE_URL && process.env.CALIBRE_URL.trim() !== '') { this.calibreDetected = true; return true; }
     if (process.env.ENABLE_CALIBRE === '0') { this.calibreDetected = false; return false; }
     if (this.calibreDetected !== null) return this.calibreDetected;
     if (this.detecting) return this.detecting;
@@ -100,6 +104,14 @@ export class ConversionService {
 
   /** Run calibre ebook-convert for arbitrary conversion. */
   private async convertViaCalibre(bookId: number, sourceExt: string, target: TargetFormat, raw: Buffer, cacheFile: string): Promise<Buffer> {
+    // Prefer external microservice if configured
+    if (process.env.CALIBRE_URL && process.env.CALIBRE_URL.trim() !== '') {
+      const out = await this.convertViaCalibreService(bookId, sourceExt, target, raw);
+      try { await ensureDir(path.dirname(cacheFile)); await fs.writeFile(cacheFile, out); } catch (e) { logger.warn('Failed to cache calibre conversion', { bookId, target, error: (e as Error).message }); }
+      logger.info('Calibre service conversion complete', { bookId, from: sourceExt, to: target, size: out.length });
+      return out;
+    }
+
     const workDir = '/tmp/conversions';
     try { await fs.mkdir(workDir, { recursive: true }); } catch {}
     const inputPath = path.join(workDir, `${bookId}-src.${sourceExt || 'bin'}`);
@@ -128,6 +140,45 @@ export class ConversionService {
     try { await ensureDir(path.dirname(cacheFile)); await fs.writeFile(cacheFile, out); } catch (e) { logger.warn('Failed to cache calibre conversion', { bookId, target, error: (e as Error).message }); }
     logger.info('Calibre conversion complete', { bookId, from: sourceExt, to: target, size: out.length });
     return out;
+  }
+
+  /** Invoke external Calibre HTTP microservice */
+  private async convertViaCalibreService(bookId: number, sourceExt: string, target: TargetFormat, raw: Buffer): Promise<Buffer> {
+    const base = (process.env.CALIBRE_URL || '').replace(/\/$/, '');
+    const urlStr = `${base}/convert?from=${encodeURIComponent(sourceExt || 'bin')}&to=${encodeURIComponent(target)}`;
+    logger.info('Calling Calibre service', { bookId, url: urlStr });
+    const isHttps = urlStr.startsWith('https://');
+    const lib = isHttps ? https : http;
+    const timeoutMs = Number(process.env.CALIBRE_CONVERSION_TIMEOUT_MS || 180000);
+    const { URL } = await import('url');
+    const u = new URL(urlStr);
+    const options: any = {
+      method: 'POST',
+      hostname: u.hostname,
+      port: u.port || (isHttps ? 443 : 80),
+      path: u.pathname + u.search,
+      headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': Buffer.byteLength(raw) },
+    };
+    if (u.username || u.password) {
+      const auth = Buffer.from(`${u.username}:${u.password}`).toString('base64');
+      options.headers['Authorization'] = `Basic ${auth}`;
+    }
+    return await new Promise<Buffer>((resolve, reject) => {
+      const req = lib.request(options, (res: any) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => {
+          const buf = Buffer.concat(chunks);
+          if (res.statusCode >= 200 && res.statusCode < 300) return resolve(buf);
+          const msg = buf.toString('utf8');
+          return reject(new Error(`Calibre service error ${res.statusCode}: ${msg.slice(0, 500)}`));
+        });
+      });
+      req.on('error', reject);
+      req.setTimeout(timeoutMs, () => { try { req.destroy(new Error('Calibre service timeout')); } catch {} });
+      req.write(raw);
+      req.end();
+    });
   }
 
   /** High-level FB2 -> EPUB conversion with naive XHTML rendering (fallback when calibre is absent) */
