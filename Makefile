@@ -13,6 +13,10 @@ NC := \033[0m # No Color
 # Use docker compose if available, fallback to docker-compose
 COMPOSE := $(shell if docker compose version > /dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi)
 
+# Pick a sensible default NGINX image (multi-arch) but allow override.
+# nginx:1.27-alpine supports linux/amd64 and linux/arm64 out of the box.
+export NGINX_IMAGE ?= nginx:1.27-alpine
+
 # Default target
 help:
 	@echo "$(BLUE)Flibusta Management Commands:$(NC)"
