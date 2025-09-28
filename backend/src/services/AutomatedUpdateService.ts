@@ -87,6 +87,25 @@ class AutomatedUpdateService {
                     this.scheduleUpdate(schedule);
                 }
             }
+
+            // If no schedules are defined in DB, optionally bootstrap defaults via env
+            if (!schedules.length) {
+                const dailyCron = process.env.AUTOMATE_DAILY_CRON || '0 3 * * *'; // 03:00 UTC
+                const coversCron = process.env.AUTOMATE_COVERS_CRON || '30 3 * * *'; // 03:30 UTC
+                try {
+                    this.scheduler?.set('daily_books', cron.schedule(dailyCron, async () => {
+                        logger.info('Env bootstrap scheduler: daily_books');
+                        await this.runScheduledUpdate('daily_books');
+                    }, { scheduled: true, timezone: 'UTC' }));
+                    this.scheduler?.set('covers', cron.schedule(coversCron, async () => {
+                        logger.info('Env bootstrap scheduler: covers');
+                        await this.runScheduledUpdate('covers');
+                    }, { scheduled: true, timezone: 'UTC' }));
+                    logger.info('Bootstrapped default automated schedules from env');
+                } catch (e) {
+                    logger.warn('Failed to bootstrap default schedules from env', { error: (e as Error).message });
+                }
+            }
             
             logger.info(`Scheduled ${schedules.length} automated updates`);
         } catch (error) {

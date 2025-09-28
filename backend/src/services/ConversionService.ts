@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
 import http from 'http';
 import https from 'https';
 import logger from '../utils/logger';
-import { extractCoverFromFb2 } from '../routes/files'; // re-use existing helper
+import { extractCoverFromFb2 } from '../utils/cover';
 
 /** Supported target formats (extendable) */
 export type TargetFormat = 'epub' | 'mobi' | 'azw3' | 'pdf' | 'txt' | 'rtf' | 'html';

@@ -8,6 +8,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import logger from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import CoverCacheService from './CoverCacheService';
 
 const execAsync = promisify(exec);
 
@@ -353,6 +354,23 @@ class UpdateService {
                 }
                 this.progress!.currentIndex += 1;
                 this.progress!.updatedAt = new Date().toISOString();
+            }
+
+            // After ensuring archives, optionally run a precache pass for covers
+            try {
+                const limit = Number(process.env.COVERS_PRECACHE_LIMIT || 500);
+                const mode = (process.env.COVERS_PRECACHE_MODE as 'recent'|'missing'|'all') || 'missing';
+                logger.info(`Running cover precache after covers update: mode=${mode} limit=${limit}`);
+                const summary = await CoverCacheService.precacheAll({ limit, mode });
+                results.push({
+                  file: `covers_precache_${mode}`,
+                  status: 'success',
+                  message: `Precached covers: processed=${summary.processed}, cached=${summary.cached}, errors=${summary.errors}`
+                });
+            } catch (e) {
+                const msg = (e as Error).message;
+                logger.warn('Cover precache after covers update failed', { error: msg });
+                results.push({ file: 'covers_precache', status: 'error', message: msg });
             }
 
             this.isRunning = false;
