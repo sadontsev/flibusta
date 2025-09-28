@@ -86,6 +86,7 @@ db/postgresql.auto.conf
 cache/authors/
 cache/covers/
 cache/*.zip
+cache/converted/
 
 # Book files (large archives)
 flibusta/*.zip
@@ -100,6 +101,9 @@ FlibustaSQL/
 *.swp
 *.swo
 *~
+
+# Local/temporary scripts not needed in repo
+linux-installer.sh
 
 # IDE files
 .vscode/
