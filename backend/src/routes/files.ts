@@ -336,6 +336,7 @@ router.get('/cover/:bookId', [
 ], validate, createTypeSafeHandler(async (req: ExtendedRequest, res: Response): Promise<Response | void> => {
   const bookId = parseInt(req.params.bookId!);
   const fast = ((req.query as any).fast === '1' || (req.query as any).fast === 'true');
+  const checkOnly = ((req.query as any).check === '1' || (req.query as any).check === 'true');
 
     // Get book cover info
     const bookCover = await getRow(`
@@ -358,6 +359,11 @@ router.get('/cover/:bookId', [
   if (cached) {
     logger.info('Cover route: serving from cache', { bookId, path: cached });
     return res.sendFile(cached);
+  }
+
+  // If this is a cache probe, do not attempt extraction or scheduling
+  if (checkOnly) {
+    return res.status(404).end();
   }
 
   if (fast) {
