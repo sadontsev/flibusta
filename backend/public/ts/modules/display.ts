@@ -71,7 +71,7 @@ class DisplayModuleNG {
         const busyBadge = document.getElementById('admin-update-badge');
         if (busyBadge) busyBadge.style.display = isRunning ? 'inline-block' : 'none';
         if (!isRunning) { this.clearUpdatePoll(); }
-      } catch (e) {
+      } catch {
         this.clearUpdatePoll();
       }
     };
@@ -450,7 +450,7 @@ class DisplayModuleNG {
             </td>
           </tr>`;
         }).join('') : `<tr><td colspan="6" class="py-3 px-3 text-gray-400">Нет пользователей</td></tr>`;
-      } catch (e) {
+      } catch {
         this.app.api.handleAPIError(e, 'loadUsersForAdmin');
       }
     }, 0);
@@ -518,7 +518,7 @@ class DisplayModuleNG {
         const icon = primary ? '<i class="fas fa-download mr-2"></i>' : '';
         return `<button title="${tooltip}" class="${primary ? 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700' : 'bg-gray-800 hover:bg-gray-700 border border-gray-700'} text-white font-medium py-2 px-4 rounded-lg transition-all duration-200" onclick="app.downloadBook('${book.bookid}'${primary ? '' : `, '${fmt}'`})">${icon}${label}</button>`;
       }).join('');
-    } catch (e) {
+    } catch {
       formatButtons = `<button class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg" onclick="app.downloadBook('${book.bookid}')"><i class=\"fas fa-download mr-2\"></i>Скачать</button>`;
     }
 
@@ -554,5 +554,4 @@ class DisplayModuleNG {
 }
 
 // Expose globally
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).DisplayModule = (window as any).DisplayModule || DisplayModuleNG;
+(window as unknown as Record<string, unknown>).DisplayModule = (window as unknown as Record<string, unknown>).DisplayModule || DisplayModuleNG;

@@ -1,7 +1,7 @@
 # Flibusta Makefile
 # Comprehensive deployment and management commands
 
-.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre
+.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre lint lint-fix
 
 # Colors for output
 RED := \033[0;31m
@@ -38,6 +38,8 @@ help:
 	@echo "$(GREEN)Testing & Health:$(NC)"
 	@echo "  make health-check    - Check application health"
 	@echo "  make test            - Run API tests"
+	@echo "  make lint            - Run ESLint across backend (server + frontend TS)"
+	@echo "  make lint-fix        - Run ESLint with --fix"
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
 	@echo "  make rebuild         - Rebuild backend only"
@@ -55,9 +57,9 @@ check-docker:
 
 # Build containers (exclude calibre by default to avoid unnecessary rebuilds)
 build: check-docker
-	@echo "$(BLUE)[INFO] Building core containers (backend, postgres)...$(NC)"
-	@$(COMPOSE) build --no-cache backend postgres
-	@echo "$(GREEN)[SUCCESS] Core containers built successfully$(NC)"
+	@echo "$(BLUE)[INFO] Building backend container...$(NC)"
+	@$(COMPOSE) build --no-cache backend
+	@echo "$(GREEN)[SUCCESS] Backend built successfully$(NC)"
 
 # Build calibre only (on demand)
 build-calibre: check-docker
@@ -202,8 +204,8 @@ deploy: check-docker
 	@$(COMPOSE) down
 	@echo "$(BLUE)[INFO] Cleaning up Docker build cache (images preserved)...$(NC)"
 	@docker builder prune -f
-	@echo "$(BLUE)[INFO] Rebuilding core containers (backend, postgres)...$(NC)"
-	@$(COMPOSE) build --no-cache backend postgres
+	@echo "$(BLUE)[INFO] Rebuilding backend container...$(NC)"
+	@$(COMPOSE) build --no-cache backend
 	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
 	@$(COMPOSE) up -d
 	@$(MAKE) wait-for-services
@@ -302,3 +304,12 @@ db-persist: check-docker
 	@$(COMPOSE) exec -T postgres psql -U flibusta -d flibusta -c "SELECT count(*) FROM persist_check WHERE label='marker';" | tail -n +3 | head -n 1 | grep -q "1" && \
 	  echo "$(GREEN)[SUCCESS] DB persistence OK (marker row present)$(NC)" || \
 	  (echo "$(RED)[ERROR] DB persistence check failed (marker row missing)$(NC)"; exit 1)
+
+# Lint code (backend project)
+lint:
+	@echo "$(BLUE)[INFO] Running ESLint (backend)…$(NC)"
+	@cd backend && npm run lint
+
+lint-fix:
+	@echo "$(BLUE)[INFO] Running ESLint with autofix (backend)…$(NC)"
+	@cd backend && npm run lint:fix

@@ -164,7 +164,7 @@ class BookService {
         ...(book as any),
         original_filetype: (book as any).filetype,
         filetype: effectiveType,
-        cover_url: `/api/files/cover/${bookId}`,
+  cover_url: `/api/files/cover/${bookId}?fast=1`,
         authors: authors as any,
         genres: genres as any,
         series: series as any,
@@ -206,12 +206,43 @@ class BookService {
 
       // Combined title + author logic (keep semantics of previous implementation)
       // Full-text search for title if query provided. Fallback to trigram ILIKE if short or no lexemes.
-      let usedFTS = false;
       if (query) {
-        // Basic sanitization – rely on plainto_tsquery for simplicity.
-        usedFTS = true;
-        conditions.push(`(b.search_vector @@ plainto_tsquery('simple', $${p}))`);
+        // Russian FTS primary match + tokenized fallback across title and author names
+        const ftsParam = p;
         params.push(query); p++;
+
+        // Tokenize query to handle cases like "Война и мир толстой":
+        // require that each token appears either in title or any author field
+        const stopwords = new Set(['и','в','на','с','к','по','за','о','от','до','из','у','над','под','для','как','что','это','не','а','но','же','ли']);
+        const tokens = query
+          .split(/\s+/)
+          .map(t => t.trim())
+          .filter(t => t.length >= 2 && !stopwords.has(t.toLowerCase()))
+          .slice(0, 6);
+
+        const tokenConds: string[] = [];
+        for (const _t of tokens) {
+          const likeIdx = p;
+          params.push(`%${_t}%`); p++;
+          tokenConds.push(`(
+            b.title ILIKE $${likeIdx}
+            OR EXISTS (
+              SELECT 1 FROM libavtor a
+              JOIN libavtorname an ON a.avtorid = an.avtorid
+              WHERE a.bookid = b.bookid AND (
+                an.lastname ILIKE $${likeIdx}
+                OR an.firstname ILIKE $${likeIdx}
+                OR an.nickname ILIKE $${likeIdx}
+                OR (an.lastname || ' ' || an.firstname) ILIKE $${likeIdx}
+              )
+            )
+          )`);
+        }
+
+        // Combine FTS and tokenized fallback (AND across tokens)
+        const fallback = tokenConds.length ? tokenConds.join(' AND ') : '';
+        const combined = fallback ? `(${fallback})` : 'TRUE';
+        conditions.push(`(b.search_vector @@ websearch_to_tsquery('russian', $${ftsParam}) OR ${combined})`);
       }
       if (author) {
         // Use trigram index on concatenated author fields via expression index (already created)
@@ -244,8 +275,8 @@ class BookService {
         params.push(year); p++;
       }
       if (language) {
-        conditions.push(`b.lang = $${p}`);
-        params.push(language); p++;
+        conditions.push(`LOWER(TRIM(b.lang)) = LOWER($${p})`);
+        params.push(language.trim()); p++;
       }
 
       // Sorting logic
@@ -281,7 +312,7 @@ class BookService {
       const limitParamIndex = p;
       const offsetParamIndex = p + 1;
 
-      const relevanceSelect = (sort === 'relevance' && query) ? ', ts_rank(b.search_vector, plainto_tsquery(\'simple\', $' + (relevanceBase as number) + ')) AS relevance_score' : '';
+  const relevanceSelect = (sort === 'relevance' && query) ? ', ts_rank(b.search_vector, websearch_to_tsquery(\'russian\', $' + (relevanceBase as number) + ')) AS relevance_score' : '';
 
       // Single-pass query with lateral joins to avoid N+1
       const sql = `
@@ -357,7 +388,7 @@ class BookService {
             authors: authorsArr,
             genres,
             filetype: effectiveType,
-            cover_url: `/api/files/cover/${(r as any).bookid}`
+            cover_url: `/api/files/cover/${(r as any).bookid}?fast=1`
         };
       });
 
@@ -417,7 +448,7 @@ class BookService {
         // Override filetype with actually available one
         const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
         (book as any).filetype = effectiveType || book.filetype;
-        (book as any).cover_url = `/api/files/cover/${book.bookid}`;
+  (book as any).cover_url = `/api/files/cover/${book.bookid}?fast=1`;
       }
 
       return books as any;
@@ -463,7 +494,7 @@ class BookService {
         book.authors = authors;
         const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
         (book as any).filetype = effectiveType || book.filetype;
-        (book as any).cover_url = `/api/files/cover/${book.bookid}`;
+  (book as any).cover_url = `/api/files/cover/${book.bookid}?fast=1`;
       }
 
       return {
@@ -519,7 +550,7 @@ class BookService {
         book.authors = authors;
         const effectiveType = await this.getAvailableFiletype(book.bookid, book.filetype);
         (book as any).filetype = effectiveType || book.filetype;
-        (book as any).cover_url = `/api/files/cover/${book.bookid}`;
+  (book as any).cover_url = `/api/files/cover/${book.bookid}?fast=1`;
       }
 
       return {

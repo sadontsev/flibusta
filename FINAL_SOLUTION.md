@@ -54,18 +54,22 @@ curl "http://localhost:27102/api/files/book/584331"
 
 ### 1. **Initial Setup**
 ```bash
-# Run the complete setup script
-./setup_complete.sh
+# Bring up the stack
+docker compose up -d
+
+# Import SQL and covers via Node manage CLI
+npm --prefix backend run manage download-sql
+npm --prefix backend run manage download-covers
 ```
 
 ### 2. **Download Additional Books**
 ```bash
 # Download daily book files
-./update_daily_local.sh
+npm --prefix backend run manage update-daily
 
 # Or use the admin panel
 # 1. Go to http://localhost:27102
-# 2. Login as admin (max/hitthat)
+# 2. Login as admin
 # 3. Use "Update Daily Books" button
 ```
 

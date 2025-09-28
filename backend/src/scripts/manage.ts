@@ -5,7 +5,8 @@ import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import dotenv from 'dotenv';
 import DatabaseManager from './DatabaseManager';
-import logger from '../utils/logger';
+import UpdateService from '../services/UpdateService';
+import CoverCacheService from '../services/CoverCacheService';
 
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../../.env') });
@@ -20,8 +21,8 @@ const argv = yargs(hideBin(process.argv))
       await dbManager.downloadSqlFiles();
       console.log('✅ SQL files downloaded successfully');
       process.exit(0);
-    } catch (error) {
-      console.error('❌ SQL download failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ SQL download failed:', (_error as Error).message);
       process.exit(1);
     }
   })
@@ -30,8 +31,8 @@ const argv = yargs(hideBin(process.argv))
       await dbManager.downloadCoverFiles();
       console.log('✅ Cover files downloaded successfully');
       process.exit(0);
-    } catch (error) {
-      console.error('❌ Cover download failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ Cover download failed:', (_error as Error).message);
       process.exit(1);
     }
   })
@@ -40,28 +41,59 @@ const argv = yargs(hideBin(process.argv))
       await dbManager.updateDailyBooks();
       console.log('✅ Daily books updated successfully');
       process.exit(0);
-    } catch (error) {
-      console.error('❌ Daily update failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ Daily update failed:', (_error as Error).message);
       process.exit(1);
     }
   })
   .command('update-zip-mappings', 'Scan and update ZIP file mappings', {}, async () => {
     try {
-      const result = await dbManager.updateZipMappings();
+  await dbManager.updateZipMappings();
       console.log(`✅ ZIP mappings updated successfully`);
       process.exit(0);
-    } catch (error) {
-      console.error('❌ ZIP mappings update failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ ZIP mappings update failed:', (_error as Error).message);
+      process.exit(1);
+    }
+  })
+  .command('update-mappings', 'Execute book mappings SQL (MAPPINGS_SQL_PATH)', {}, async () => {
+    try {
+      const svc = new UpdateService();
+      const res = await svc.updateBookMappings();
+      if (res.status === 'success') {
+        console.log('✅ Book mappings updated successfully');
+        process.exit(0);
+      } else {
+        console.error(`❌ Book mappings failed: ${res.message}`);
+        process.exit(1);
+      }
+    } catch (_error) {
+      console.error('❌ Book mappings failed:', (_error as Error).message);
+      process.exit(1);
+    }
+  })
+  .command('covers-precache', 'Precache book covers into cache (lib.b/lib.a/book files)', y => y
+    .option('limit', { type: 'number', default: 50, describe: 'Max books to process' })
+    .option('mode', { type: 'string', choices: ['recent', 'missing', 'all'] as const, default: 'missing', describe: 'Precache selection mode' })
+  , async (args) => {
+    try {
+      const limit = Number(args.limit ?? 50);
+      const mode = (args.mode as 'recent'|'missing'|'all') ?? 'missing';
+      const summary = await CoverCacheService.precacheAll({ limit, mode });
+      console.log(`✅ Covers precache done: processed=${summary.processed}, cached=${summary.cached}, errors=${summary.errors}`);
+      process.exit(0);
+    } catch (_error) {
+      console.error('❌ Covers precache failed:', (_error as Error).message);
       process.exit(1);
     }
   })
   .command('create-missing-filenames', 'Create missing filename entries', {}, async () => {
     try {
-      const result = await dbManager.createMissingFilenames();
+  await dbManager.createMissingFilenames();
       console.log(`✅ Missing filename entries created successfully`);
       process.exit(0);
-    } catch (error) {
-      console.error('❌ Create missing filenames failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ Create missing filenames failed:', (_error as Error).message);
       process.exit(1);
     }
   })
@@ -70,8 +102,8 @@ const argv = yargs(hideBin(process.argv))
       await dbManager.updateSearchVectors();
       console.log('✅ Search vectors updated successfully');
       process.exit(0);
-    } catch (error) {
-      console.error('❌ Search vectors update failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ Search vectors update failed:', (_error as Error).message);
       process.exit(1);
     }
   })
@@ -85,8 +117,8 @@ const argv = yargs(hideBin(process.argv))
         health.issues.forEach(issue => console.log(`  - ${issue}`));
       }
       process.exit(health.healthy ? 0 : 1);
-    } catch (error) {
-      console.error('❌ Health check failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ Health check failed:', (_error as Error).message);
       process.exit(1);
     }
   })
@@ -101,20 +133,21 @@ const argv = yargs(hideBin(process.argv))
       console.log(`  Cache Hit Ratio: ${stats.cache_hit_ratio.toFixed(2)}%`);
       console.log(`  Transactions/sec: ${stats.transactions_per_second}`);
       process.exit(0);
-    } catch (error) {
-      console.error('❌ Failed to get stats:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ Failed to get stats:', (_error as Error).message);
       process.exit(1);
     }
   })
   .command('audit-archives', 'Audit DB book_zip ranges against physical ZIP files to find missing or truncated archives', {}, async () => {
     try {
       const root = process.env.BOOKS_PATH || '/app/flibusta';
-      const { readdir, stat } = await import('fs/promises');
+  const { readdir } = await import('fs/promises');
       const { exec } = await import('child_process');
       const { promisify } = await import('util');
       const pexec = promisify(exec);
-      const pathModule = await import('path');
-      const db = (await import('../database/connection'));
+    // Disable no-inner-declarations warning for large restructuring
+    const pathModule = await import('path'); // Used for joining paths
+    const db = (await import('../database/connection')); // Database connection
       const getRows = db.getRows as (sql:string, params?:any[])=>Promise<any[]>;
       const getRow = db.getRow as (sql:string, params?:any[])=>Promise<any>;
 
@@ -189,7 +222,7 @@ const argv = yargs(hideBin(process.argv))
           const res = { maxId, count };
           zipInfoCache[fullPath] = res;
           return res;
-        } catch (e) {
+        } catch {
           zipInfoCache[fullPath] = null;
           return null;
         }
@@ -238,8 +271,8 @@ const argv = yargs(hideBin(process.argv))
       } else {
         process.exitCode = 0;
       }
-    } catch (error) {
-      console.error('❌ Audit failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ Audit failed:', (_error as Error).message);
       process.exit(1);
     }
   })
@@ -262,7 +295,7 @@ const argv = yargs(hideBin(process.argv))
   const getRow = db.getRow as (sql:string, params?:any[])=>Promise<any>;
   const queryExec = db.query as (sql:string, params?:any[])=>Promise<any>;
 
-      const files = await readdir(root);
+  const files = await readdir(root);
       const rxRangeDot = /^f\.(fb2|epub|djvu|pdf|mobi|txt)\.(\d+)-(\d+)\.zip$/i;
       const rxRangeDash = /^f\.(fb2|epub|djvu|pdf|mobi|txt)-(\d+)-(\d+)\.zip$/i;
       const rxDate = /^f\.(fb2|epub|djvu|pdf|mobi|txt)\.(\d{8})\.zip$/i; // dated daily snapshots
@@ -341,7 +374,7 @@ const argv = yargs(hideBin(process.argv))
             s.actualEnd = null;
             s.count = 0;
           }
-        } catch (e) {
+        } catch {
           s.count = 0;
           s.actualStart = null;
           s.actualEnd = null;
@@ -407,8 +440,8 @@ const argv = yargs(hideBin(process.argv))
         if (overlaps.length>20) console.log(`  ... (${overlaps.length-20} more)`);
       }
       process.exit(0);
-    } catch (error) {
-      console.error('❌ Reconciliation failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ Reconciliation failed:', (_error as Error).message);
       process.exit(1);
     }
   })
@@ -419,8 +452,7 @@ const argv = yargs(hideBin(process.argv))
     try {
       const root = process.env.BOOKS_PATH || '/app/flibusta';
       console.log(`🧹 Purging orphan zip mappings using root ${root}`);
-      const { readdir } = await import('fs/promises');
-      const pathModule = await import('path');
+  const { readdir } = await import('fs/promises');
       const db = (await import('../database/connection'));
       const getRows = db.getRows as (sql:string, params?:any[])=>Promise<any[]>;
       const queryExec = db.query as (sql:string, params?:any[])=>Promise<any>;
@@ -455,8 +487,8 @@ const argv = yargs(hideBin(process.argv))
       }
       console.log(`✅ Deleted ${deleted} orphan rows.`);
       process.exit(0);
-    } catch (error) {
-      console.error('❌ Purge failed:', (error as Error).message);
+    } catch (_error) {
+      console.error('❌ Purge failed:', (_error as Error).message);
       process.exit(1);
     }
   })

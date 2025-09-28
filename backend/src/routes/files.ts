@@ -13,7 +13,9 @@ import {
 } from '../middleware/validation';
 import { buildErrorResponse, buildSuccessResponse } from '../types/api';
 import { ExtendedRequest } from '../types';
-import ConversionService from '../services/ConversionService';
+import ConversionService, { TargetFormat } from '../services/ConversionService';
+import CoverCacheService from '../services/CoverCacheService';
+import { getBookZipEntry, extractCoverFromFb2, extractCoverFromEpub } from '../utils/cover';
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -23,10 +25,10 @@ async function extractZipEntry(zipPath: string, internalPath: string): Promise<B
   // BusyBox unzip supports -p; fall back to AdmZip if unzip is missing or fails
   try {
     const { stdout } = await execFileAsync('unzip', ['-p', zipPath, internalPath], { encoding: 'buffer', maxBuffer: 1024 * 1024 * 100 });
-    if (stdout && (stdout as any).length) {
-      return stdout as unknown as Buffer;
+    if (stdout && (stdout as Buffer).length) {
+      return stdout as Buffer;
     }
-  } catch (e) {
+  } catch {
     // will fallback below
   }
   // Fallback: read using AdmZip (loads central directory and target entry only)
@@ -39,7 +41,8 @@ async function extractZipEntry(zipPath: string, internalPath: string): Promise<B
 
 // Helper: ensure directory exists
 async function ensureDir(dirPath: string): Promise<void> {
-  try { await fs.mkdir(dirPath, { recursive: true }); } catch {}
+  try { await fs.mkdir(dirPath, { recursive: true }); }
+  catch {}
 }
 
 // Helper: detect image extension from magic bytes
@@ -72,235 +75,13 @@ async function findCachedImage(baseDir: string, baseName: string): Promise<strin
   const exts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
   for (const ext of exts) {
     const p = path.join(baseDir, `${baseName}.${ext}`);
-    try { await fs.access(p); return p; } catch {}
+  try { await fs.access(p); return p; }
+  catch {}
   }
   return null;
 }
 
-// Locate a book entry within the flibusta book zips
-export async function getBookZipEntry(bookId: number, requestedType?: string): Promise<{ zipPath: string; entryName: string; entryBuffer: Buffer; }> {
-  // Determine requested type
-  const requested = (requestedType || '').toLowerCase().trim();
-  const booksRoot = process.env.BOOKS_PATH || '/application/flibusta';
 
-  // Helper: pick a candidate zip from DB mapping if it exists and file is present
-  async function tryDbMapping(): Promise<string | null> {
-    const fileInfo = await getRow(`
-        SELECT filename, start_id, end_id, usr
-        FROM book_zip
-        WHERE $1 BETWEEN start_id AND end_id
-        ORDER BY
-          (CASE WHEN $2 <> '' AND filename ILIKE ('f.' || $2 || '.%') THEN 1 ELSE 0 END) DESC,
-          (CASE WHEN filename ILIKE 'f.fb2.%' THEN 1 ELSE 0 END) DESC,
-          (CASE WHEN filename ILIKE 'f.epub.%' THEN 1 ELSE 0 END) DESC,
-          (CASE WHEN filename ILIKE 'f.djvu.%' THEN 1 ELSE 0 END) DESC,
-          usr ASC,
-          filename ASC
-        LIMIT 1
-      `, [bookId, requested]);
-    if (!fileInfo || !fileInfo.filename) return null;
-    const p = path.join(booksRoot, String(fileInfo.filename));
-    try { await fs.access(p); return p; } catch { return null; }
-  }
-
-  // Helper: scan directory for any matching range zip if DB mapping is missing or file absent
-  async function scanDirForZip(): Promise<string | null> {
-    try {
-      const files = await fs.readdir(booksRoot);
-      // Parse files like f.fb2.821330-821363.zip
-      type Candidate = { full: string; ext: string; start: number; end: number };
-      const candidates: Candidate[] = [];
-      for (const f of files) {
-        // Support patterns:
-        //  - f.<ext>.<start>-<end>.zip
-        //  - f.<ext>-<start>-<end>.zip
-        //  - d.<ext>-<start>-<end>.zip (less preferred but acceptable)
-        const m = /^(?:[fd])\.(\w+)[\.-](\d+)-(\d+)\.zip$/i.exec(f);
-        if (!m || m.length < 4 || !m[1] || !m[2] || !m[3]) continue;
-        const ext = (m[1] as string).toLowerCase();
-        const start = parseInt(m[2] as string, 10);
-        const end = parseInt(m[3] as string, 10);
-        if (Number.isFinite(start) && Number.isFinite(end) && start <= bookId && bookId <= end) {
-          candidates.push({ full: path.join(booksRoot, f), ext, start, end });
-        }
-      }
-      if (!candidates.length) return null;
-      // Prefer requested, then fb2, then epub, then the shortest range (more likely precise)
-      const prefOrder = (ext: string) => {
-        if (requested && ext === requested) return 0;
-        if (ext === 'fb2') return 1;
-        if (ext === 'epub') return 2;
-        return 3;
-      };
-      candidates.sort((a, b) => {
-        const pa = prefOrder(a.ext) - prefOrder(b.ext);
-        if (pa !== 0) return pa;
-        const ra = (a.end - a.start) - (b.end - b.start);
-        if (ra !== 0) return ra;
-        return a.start - b.start;
-      });
-      return candidates[0]?.full || null;
-    } catch { return null; }
-  }
-
-  // Resolve a zip path either from DB or by scanning the directory
-  let zipPath = await tryDbMapping();
-  if (!zipPath) {
-    zipPath = await scanDirForZip();
-  }
-  if (!zipPath) {
-    throw new Error('Book archive not available on disk');
-  }
-
-  // Read entries
-  const zip = new AdmZip(zipPath);
-  const entries = zip.getEntries();
-  const toLower = (s: string) => (s || '').toLowerCase();
-
-  // Try libfilename first
-  let bookFilename: string | null = null;
-  const lf = await getRow(`SELECT filename FROM libfilename WHERE bookid = $1 LIMIT 1`, [bookId]);
-  if (lf && lf.filename) bookFilename = toLower(String(lf.filename));
-
-  const entryNameMatches = (entryNameLower: string, fileNameLower: string) => {
-    return entryNameLower.endsWith(`/${fileNameLower}`) || entryNameLower === fileNameLower || entryNameLower.includes(`/${fileNameLower}`);
-  };
-
-  let found: any = null;
-  if (bookFilename) {
-    found = entries.find(e => entryNameMatches(toLower(e.entryName), bookFilename!)) || null;
-  }
-
-  // Preferred extensions order using archive/requested type
-  // Best-guess archive type from filename (if any)
-  const archiveTypeMatch = /^f\.(\w+)\./i.exec(path.basename(zipPath));
-  const archiveType = archiveTypeMatch && archiveTypeMatch[1] ? archiveTypeMatch[1].toLowerCase() : '';
-  const baseExts = ['fb2', 'epub', 'djvu', 'pdf', 'mobi', 'txt', 'rtf', 'html', 'htm'];
-  const preferredExts = Array.from(new Set([archiveType, requested, ...baseExts].filter(Boolean)));
-  // Strict: prefer exact basename match of bookId first
-  if (!found) {
-    for (const ext of preferredExts) {
-      const candidate = `${bookId}.${ext}`;
-      const f = entries.find(e => {
-        const name = toLower(e.entryName).split('/').pop() || '';
-        return name === candidate;
-      });
-      if (f) { found = f; break; }
-    }
-  }
-  // Relaxed: allow subfolder + exact basename
-  if (!found) {
-    for (const ext of preferredExts) {
-      const candidate = `${bookId}.${ext}`;
-      const f = entries.find(e => toLower(e.entryName).endsWith('/' + candidate));
-      if (f) { found = f; break; }
-    }
-  }
-  // As a last resort, avoid picking arbitrary .*ext; require the id to be present before the extension
-  if (!found) {
-    for (const ext of preferredExts) {
-      const f = entries.find(e => /(^|\/)\d+\.[a-z0-9]+$/i.test(e.entryName) && toLower(e.entryName).includes(`/${bookId}.`));
-      if (f) { found = f; break; }
-    }
-  }
-  if (!found) {
-    throw new Error('Book file not found in archive');
-  }
-
-  return { zipPath, entryName: found.entryName, entryBuffer: found.getData() };
-}
-
-// Extract cover from FB2 XML buffer using heuristics
-export function extractCoverFromFb2(fb2Buffer: Buffer): Buffer | null {
-  try {
-    const xml = fb2Buffer.toString('utf8');
-    // Quick heuristic: find binary blocks likely to be cover
-    // 1) Look for <binary id="...cover..."> first
-    const coverIdMatch = xml.match(/<binary[^>]*id=["']([^"']*cover[^"']*)["'][^>]*>([\s\S]*?)<\/binary>/i);
-    if (coverIdMatch && coverIdMatch[2]) {
-      const b64 = coverIdMatch[2].replace(/\s+/g, '');
-      try { return Buffer.from(b64, 'base64'); } catch {}
-    }
-    // 2) Any binary with image content-type
-    const imgBinaryMatch = xml.match(/<binary[^>]*content-type=["']image\/(?:jpeg|jpg|png|gif|webp)["'][^>]*>([\s\S]*?)<\/binary>/i);
-    if (imgBinaryMatch && imgBinaryMatch[1]) {
-      const b64 = imgBinaryMatch[1].replace(/\s+/g, '');
-      try { return Buffer.from(b64, 'base64'); } catch {}
-    }
-    // 3) Fallback: first binary containing jpg/png keyword in id
-    const anyBinaryMatch = xml.match(/<binary[^>]*id=["'][^"']*(?:jpg|jpeg|png|cover)[^"']*["'][^>]*>([\s\S]*?)<\/binary>/i);
-    if (anyBinaryMatch && anyBinaryMatch[1]) {
-      const b64 = anyBinaryMatch[1].replace(/\s+/g, '');
-      try { return Buffer.from(b64, 'base64'); } catch {}
-    }
-  } catch {}
-  return null;
-}
-
-// Extract cover from EPUB buffer (zip) using container.xml/opf heuristics
-export function extractCoverFromEpub(epubBuffer: Buffer): Buffer | null {
-  try {
-    const zip = new AdmZip(epubBuffer);
-    const entries = zip.getEntries();
-    const getEntry = (name: string) => {
-      const n = name.replace(/\\/g, '/');
-      return entries.find(e => e.entryName.toLowerCase() === n.toLowerCase());
-    };
-    const readText = (e: any) => e ? e.getData().toString('utf8') : '';
-
-    // Find OPF via META-INF/container.xml
-    const container = getEntry('META-INF/container.xml');
-    let opfPath = '';
-    if (container) {
-      const xml = readText(container);
-      const m = xml.match(/full-path=["']([^"']+)["']/i);
-      if (m) opfPath = m[1];
-    }
-    // Read OPF and try to locate cover
-    if (opfPath) {
-      const opf = getEntry(opfPath);
-      if (opf) {
-        const opfXml = readText(opf);
-        // meta name="cover" content="id"
-        const meta = opfXml.match(/<meta[^>]*name=["']cover["'][^>]*content=["']([^"']+)["'][^>]*>/i);
-        let coverHref = '';
-        if (meta) {
-          const coverId = meta[1];
-          const itemMatch = opfXml.match(new RegExp(`<item[^>]*id=["']${coverId}["'][^>]*href=["']([^"']+)["'][^>]*>`, 'i'));
-          if (itemMatch) coverHref = itemMatch[1];
-        }
-        if (!coverHref) {
-          // guide reference type="cover"
-          const guideMatch = opfXml.match(/<reference[^>]*type=["']cover["'][^>]*href=["']([^"']+)["'][^>]*>/i);
-          if (guideMatch) coverHref = guideMatch[1];
-        }
-        if (!coverHref) {
-          // Sometimes items use properties="cover-image" in EPUB3
-          const propsMatch = opfXml.match(/<item[^>]*properties=["'][^"']*cover-image[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>/i);
-          if (propsMatch) coverHref = propsMatch[1];
-        }
-        // Resolve path relative to OPF
-        if (coverHref) {
-          const baseDir = opfPath.split('/').slice(0, -1).join('/');
-          const rel = baseDir ? `${baseDir}/${coverHref}` : coverHref;
-          const norm = rel.replace(/\\/g, '/');
-          const coverEntry = entries.find(e => e.entryName.toLowerCase() === norm.toLowerCase() || e.entryName.toLowerCase().endsWith('/' + norm.toLowerCase()));
-          if (coverEntry) return coverEntry.getData();
-        }
-      }
-    }
-    // Heuristic fallback: find common cover filenames
-  const candidates = entries.filter(e => /(^|\/)cover\.(jpe?g|png|gif|webp)$/i.test(e.entryName) || /images\/(?:.*)cover/i.test(e.entryName));
-  if (candidates.length > 0 && candidates[0]) return candidates[0]!.getData();
-    // Fallback: largest image in EPUB
-    const imageEntries = entries.filter(e => /(jpe?g|png|gif|webp)$/i.test(e.entryName));
-    if (imageEntries.length) {
-      imageEntries.sort((a, b) => b.header.size - a.header.size);
-      if (imageEntries[0]) return imageEntries[0]!.getData();
-    }
-  } catch {}
-  return null;
-}
 
 // Validation middleware
 const validate = (req: ExtendedRequest, res: Response, next: NextFunction): Response | void => {
@@ -317,8 +98,9 @@ router.get('/book/:bookId', [
 ], validate, createTypeSafeHandler(async (req: ExtendedRequest, res: Response): Promise<Response | void> => {
   const bookId = parseInt(req.params.bookId!);
   const requestedFormatRaw = (req.query.format as string | undefined)?.toLowerCase();
-  const allowedTargets = ['epub','mobi','azw3','pdf','txt','rtf','html'];
-  const requestedFormat = requestedFormatRaw && allowedTargets.includes(requestedFormatRaw) ? requestedFormatRaw : undefined;
+  const ALLOWED_TARGETS: readonly TargetFormat[] = ['epub','mobi','azw3','pdf','txt','rtf','html'];
+  const isTargetFormat = (v: string): v is TargetFormat => (ALLOWED_TARGETS as readonly string[]).includes(v);
+  const requestedFormat: TargetFormat | undefined = (requestedFormatRaw && isTargetFormat(requestedFormatRaw)) ? requestedFormatRaw : undefined;
 
     // Get book info
     const book = await getRow(`
@@ -379,7 +161,7 @@ router.get('/book/:bookId', [
           };
 
           // Prefer exact filename
-          let found: any = null;
+          let found: AdmZip.IZipEntry | null = null;
           if (book.filename) {
             const bookFileName = toLower(book.filename);
             found = zipEntries.find(entry => entryNameMatches(toLower(entry.entryName), bookFileName)) || null;
@@ -427,8 +209,8 @@ router.get('/book/:bookId', [
         const m = /\.([a-z0-9]+)$/.exec(lower);
         actualExt = m ? m[1] : (requestedType || 'fb2');
         console.log('Fallback scanning located entry', { bookId, entryName });
-      } catch (scanErr) {
-        console.error('Failed to locate book in archives', { bookId, error: (scanErr as Error).message });
+      } catch (_scanErr) {
+        console.error('Failed to locate book in archives', { bookId, error: (_scanErr as Error).message });
         return res.status(404).json(buildErrorResponse('Book file not found in archive'));
       }
     }
@@ -437,7 +219,7 @@ router.get('/book/:bookId', [
     const fileName = `${book.author_name} - ${book.title}.${actualExt}`;
     if (requestedFormat && requestedFormat !== actualExt) {
       try {
-        const converted = await ConversionService.convert(bookId, actualExt, requestedFormat as any, entryBuffer!);
+  const converted = await ConversionService.convert(bookId, actualExt, requestedFormat, entryBuffer!);
         const convName = `${book.author_name} - ${book.title}.${requestedFormat}`;
         res.setHeader('Content-Type', getContentType(requestedFormat));
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(convName)}"`);
@@ -494,11 +276,11 @@ router.get('/book/:bookId/formats', [
   }
   let targets: string[] = [];
   try {
-    targets = await (ConversionService as any).listTargetsForSource(source);
+  targets = await ConversionService.listTargetsForSource(source);
   } catch (e) {
     logger.warn('List targets failed', { bookId, error: (e as Error).message });
   }
-  return res.json(buildSuccessResponse({ bookId, source, targets } as any));
+  return res.json(buildSuccessResponse({ bookId, source, targets }));
 }));
 
 // Serve author image
@@ -543,10 +325,10 @@ router.get('/author/:authorId', [
   res.setHeader('Content-Type', imageContentType(ext));
         res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year
   return res.send(processedImage);
-      } catch (zipError) {
+      } catch {
         return res.status(404).json(buildErrorResponse('Author image archive not found'));
       }
-    } catch (e) {
+    } catch {
       return res.status(404).json(buildErrorResponse('Author image archive not found'));
     }
 }));
@@ -556,6 +338,8 @@ router.get('/cover/:bookId', [
   param('bookId').isInt({ min: 1 }).withMessage('Book ID must be a positive integer')
 ], validate, createTypeSafeHandler(async (req: ExtendedRequest, res: Response): Promise<Response | void> => {
   const bookId = parseInt(req.params.bookId!);
+  const fast = (req.query.fast === '1' || req.query.fast === 'true');
+  const checkOnly = (req.query.check === '1' || req.query.check === 'true');
 
     // Get book cover info
     const bookCover = await getRow(`
@@ -580,6 +364,22 @@ router.get('/cover/:bookId', [
     return res.sendFile(cached);
   }
 
+  // If this is a cache probe, do not attempt extraction or scheduling
+  if (checkOnly) {
+    // Explicit no-store to prevent caching 404s by proxies
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(404).end();
+  }
+
+  if (fast) {
+    // Schedule cache population only for the initial fast request, not for probes
+    try { CoverCacheService.schedule(bookId); } catch {}
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'no-store');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="#111"/><text x="50%" y="50%" fill="#888" font-size="14" text-anchor="middle" dominant-baseline="middle">cover pending</text></svg>`;
+    return res.send(svg);
+  }
+
   if (bookCover) {
     // Try lib.b.attached.zip exact path
     const zipPath = path.join(process.env.CACHE_PATH || '/app/cache', 'lib.b.attached.zip');
@@ -594,8 +394,8 @@ router.get('/cover/:bookId', [
       res.setHeader('Content-Type', imageContentType(ext));
       res.setHeader('Cache-Control', 'public, max-age=31536000');
       return res.send(coverBuffer);
-    } catch (zipError) {
-      logger.warn('Cover route: lib.b extraction failed, will fallback to book file', { bookId, error: (zipError as Error).message });
+    } catch (_zipError) {
+        logger.warn('Cover route: lib.b extraction failed, will fallback to book file', { bookId, error: (_zipError as Error).message });
       // fall through to book-file extraction
     }
   }
@@ -625,12 +425,14 @@ router.get('/cover/:bookId', [
       res.setHeader('Cache-Control', 'public, max-age=31536000');
       return res.send(buf);
     }
-  } catch (fallbackErr) {
-    logger.warn('Cover route: fallback extraction failed', { bookId, error: (fallbackErr as Error).message });
+  } catch (_fallbackErr) {
+    logger.warn('Cover route: fallback extraction failed', { bookId, error: (_fallbackErr as Error).message });
     // ignore; will 404 below
   }
 
   logger.info('Cover route: not found', { bookId });
+  try { CoverCacheService.schedule(bookId); }
+  catch {}
   return res.status(404).json(buildErrorResponse('Book cover not found'));
 }));
 
@@ -659,12 +461,12 @@ export default router;
 // This is intentionally placed after export to avoid affecting normal imports.
 if (process.env.ENABLE_FILES_DEBUG === 'true') {
   try {
-    router.get('/__debug/status', async (req: any, res: any) => {
+  router.get('/__debug/status', async (req: express.Request, res: express.Response) => {
       const coversCacheRoot = process.env.COVERS_CACHE_PATH || '/app/cache/covers';
       const authorsCacheRoot = process.env.AUTHORS_CACHE_PATH || '/app/cache/authors';
       const booksRoot = process.env.BOOKS_PATH || '/app/flibusta';
-      let coversStat: any = null;
-      let authorsStat: any = null;
+  let coversStat: Record<string, unknown> | null = null;
+  let authorsStat: Record<string, unknown> | null = null;
       try { const s = await fs.stat(coversCacheRoot); coversStat = { exists: true, isDir: s.isDirectory?.(), mode: s.mode } } catch { coversStat = { exists: false }; }
       try { const s = await fs.stat(authorsCacheRoot); authorsStat = { exists: true, isDir: s.isDirectory?.(), mode: s.mode } } catch { authorsStat = { exists: false }; }
       res.json({
@@ -679,5 +481,6 @@ if (process.env.ENABLE_FILES_DEBUG === 'true') {
         authorsStat
       });
     });
-  } catch {}
+  }
+  catch {}
 }

@@ -142,5 +142,4 @@ class UIModuleNG {
 }
 
 // Expose globally
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).UIModule = (window as any).UIModule || UIModuleNG;
+(window as unknown as Record<string, unknown>).UIModule = (window as unknown as Record<string, unknown>).UIModule || UIModuleNG;

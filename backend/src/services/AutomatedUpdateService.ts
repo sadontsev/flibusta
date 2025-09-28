@@ -1,4 +1,4 @@
-import * as cron from 'node-cron';
+import { schedule as cronSchedule, ScheduledTask } from 'node-cron';
 import { query } from '../database/connection';
 import UpdateService from './UpdateService';
 import { promises as fs } from 'fs';
@@ -14,7 +14,7 @@ import {
 class AutomatedUpdateService {
     private static _instance: AutomatedUpdateService | null = null;
     private updateService: any; // Will be properly typed when UpdateService is converted
-    private scheduler: Map<string, cron.ScheduledTask> | null;
+    private scheduler: Map<string, ScheduledTask> | null;
     private isInitialized: boolean;
 
     private constructor() {
@@ -87,6 +87,25 @@ class AutomatedUpdateService {
                     this.scheduleUpdate(schedule);
                 }
             }
+
+            // If no schedules are defined in DB, optionally bootstrap defaults via env
+            if (!schedules.length) {
+                const dailyCron = process.env.AUTOMATE_DAILY_CRON || '0 3 * * *'; // 03:00 UTC
+                const coversCron = process.env.AUTOMATE_COVERS_CRON || '30 3 * * *'; // 03:30 UTC
+                try {
+                    this.scheduler?.set('daily_books', cronSchedule(dailyCron, async () => {
+                        logger.info('Env bootstrap scheduler: daily_books');
+                        await this.runScheduledUpdate('daily_books');
+                    }, { timezone: 'UTC' }));
+                    this.scheduler?.set('covers', cronSchedule(coversCron, async () => {
+                        logger.info('Env bootstrap scheduler: covers');
+                        await this.runScheduledUpdate('covers');
+                    }, { timezone: 'UTC' }));
+                    logger.info('Bootstrapped default automated schedules from env');
+                } catch (e) {
+                    logger.warn('Failed to bootstrap default schedules from env', { error: (e as Error).message });
+                }
+            }
             
             logger.info(`Scheduled ${schedules.length} automated updates`);
         } catch (error) {
@@ -97,11 +116,10 @@ class AutomatedUpdateService {
 
     scheduleUpdate(schedule: UpdateScheduleRecord): void {
         try {
-            const task = cron.schedule(schedule.cron_expression, async () => {
+            const task = cronSchedule(schedule.cron_expression, async () => {
                 logger.info(`Running scheduled update: ${schedule.update_type}`);
                 await this.runScheduledUpdate(schedule.update_type);
             }, {
-                scheduled: true,
                 timezone: "UTC"
             });
             

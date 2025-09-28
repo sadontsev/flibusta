@@ -1,11 +1,12 @@
 import express from 'express';
-import { requireAuth, requireRole, requireAdmin } from '../middleware/auth';
+import { requireAuth, requireAdmin } from '../middleware/auth';
 import { query } from '../database/connection';
 import logger from '../utils/logger';
 import UpdateService from '../services/UpdateService';
 import AutomatedUpdateService from '../services/AutomatedUpdateService';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import CoverCacheService from '../services/CoverCacheService';
 
 const router = express.Router();
 
@@ -204,6 +205,39 @@ router.post('/updates/covers', requireAuth, requireAdmin, async (req, res) => {
             success: false,
             error: (error as Error).message
         });
+    }
+});
+
+// Trigger covers precache job (on-demand)
+router.post('/covers/precache', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const { limit, mode } = req.body || {};
+        const result = await CoverCacheService.precacheAll({ limit: Number(limit) || 500, mode });
+        res.json({ success: true, data: result });
+    } catch (error) {
+        logger.error('Error precaching covers:', error);
+        res.status(500).json({ success: false, error: (error as Error).message });
+    }
+});
+
+// Schedule missing cover for a specific book
+router.post('/covers/schedule/:bookId', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const bookId = parseInt((req.params as any).bookId);
+        CoverCacheService.schedule(bookId);
+        res.json({ success: true, data: { scheduled: true, bookId } });
+    } catch (error) {
+        logger.error('Error scheduling cover:', error);
+        res.status(500).json({ success: false, error: (error as Error).message });
+    }
+});
+
+// Covers cache stats
+router.get('/covers/stats', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        res.json({ success: true, data: CoverCacheService.getStats() });
+    } catch (error) {
+        res.status(500).json({ success: false, error: (error as Error).message });
     }
 });
 

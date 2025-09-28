@@ -7,6 +7,7 @@ class APIModuleNG {
   isProcessing: boolean;
   rateLimitDelay: number;
   _inflight: number;
+  _aborters: { books?: AbortController; authors?: AbortController };
 
   constructor(app: any) {
     this.app = app;
@@ -16,6 +17,7 @@ class APIModuleNG {
     this.rateLimitDelay = 100; // 100ms between requests
     // Simple top progress bar state
     this._inflight = 0;
+    this._aborters = {};
     this._ensureTopbar();
   }
 
@@ -84,12 +86,15 @@ class APIModuleNG {
   }
 
   async searchBooks(query: string, page = 0, params: any = {}) {
+    // Abort previous books search, if any
+    try { this._aborters.books?.abort(); } catch {}
+    this._aborters.books = new AbortController();
     const searchParams = new URLSearchParams({ q: query || '', page: page.toString(), limit: params.limit || '12', sort: params.sort || 'relevance' });
     if (params.genre) searchParams.append('genre', params.genre);
     if (params.series) searchParams.append('series', params.series);
     if (params.year) searchParams.append('year', params.year);
     if (params.language) searchParams.append('language', params.language);
-    const response: any = await this.apiCall(`/api/books/search?${searchParams}`);
+    const response: any = await this.apiCall(`/api/books/search?${searchParams}`, { signal: this._aborters.books.signal as any });
     if (response?.data && Array.isArray(response.data) && response.data.length === 0) {
       this.app.ui.showToast('Подсказка', 'Ничего не найдено. Измените запрос или фильтры.', 'info');
     }
@@ -104,10 +109,13 @@ class APIModuleNG {
   async getSeriesBooks(seriesId: string) { const response: any = await this.apiCall(`/api/series/${seriesId}/books`); return response.data; }
 
   async getAuthors(params: any = {}) {
+    // Abort previous authors search, if any
+    try { this._aborters.authors?.abort(); } catch {}
+    this._aborters.authors = new AbortController();
     const searchParams = new URLSearchParams({ page: params.page || '0', limit: params.limit || '20', sort: params.sort || 'relevance' });
     if (params.query) searchParams.append('q', params.query);
     if (params.letter) searchParams.append('letter', params.letter);
-    return await this.apiCall(`/api/authors?${searchParams}`);
+    return await this.apiCall(`/api/authors?${searchParams}`, { signal: this._aborters.authors.signal as any });
   }
   async searchAuthors(params: any = {}) { return this.getAuthors(params); }
   async getGenres() { const response: any = await this.apiCall('/api/genres'); return response.data; }
@@ -201,5 +209,4 @@ class APIModuleNG {
 }
 
 // Expose globally for non-module usage
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).APIModule = (window as any).APIModule || APIModuleNG;
+(window as unknown as Record<string, unknown>).APIModule = (window as unknown as Record<string, unknown>).APIModule || APIModuleNG;

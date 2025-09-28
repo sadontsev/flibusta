@@ -1,6 +1,6 @@
 services:
   postgres:
-    build: phpdocker/pg
+    image: postgres:13
     working_dir: /application
     volumes:
       - './db:/var/lib/postgresql/data'

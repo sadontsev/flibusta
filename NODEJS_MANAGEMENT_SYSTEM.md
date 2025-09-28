@@ -33,10 +33,7 @@ This document describes the implementation of the Node.js management system that
    - `/api/admin/download-sql` - Download SQL files
    - `/api/admin/scheduler/*` - Scheduler management
 
-5. **Shell Wrapper** - `manage_nodejs.sh`:
-   - Bridge between shell and Node.js
-   - Docker integration
-   - API command alternatives
+5. Deprecated shell wrapper: use npm --prefix backend run manage instead of manage_nodejs.sh
 
 ## Features Implemented
 
@@ -102,20 +99,13 @@ npm run manage update-daily
 npm run manage full-setup
 ```
 
-### Shell Wrapper
+### Preferred invocation
+
+Use the CLI directly:
 
 ```bash
-# Show statistics
-./manage_nodejs.sh stats
-
-# Start maintenance scheduler
-./manage_nodejs.sh scheduler-start
-
-# Check Docker status
-./manage_nodejs.sh docker-status
-
-# API operations
-./manage_nodejs.sh api-health
+npm --prefix backend run manage stats
+npm --prefix backend run manage update-daily
 ```
 
 ### API Operations
@@ -179,9 +169,9 @@ logger.error('Critical error:', error);
 
 ### From Shell Scripts to Node.js
 
-1. **Immediate**: Use shell wrapper for compatibility
+1. Invoke the Node CLI directly
    ```bash
-   ./manage_nodejs.sh update-daily  # Uses Node.js backend
+   npm --prefix backend run manage update-daily
    ```
 
 2. **Gradual**: Replace cron jobs with Node.js scheduler
@@ -209,6 +199,7 @@ ENABLE_MAINTENANCE_SCHEDULER=true
 SQL_PATH=/app/sql
 BOOKS_PATH=/app/flibusta
 CACHE_PATH=/app/cache
+MAPPINGS_SQL_PATH=/app/sql/populate_book_mappings.sql
 
 # Timezone for scheduler
 TZ=UTC

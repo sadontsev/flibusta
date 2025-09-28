@@ -40,6 +40,7 @@ export interface Book {
   genres?: string[];
 }
 
+// Favorite entry for a book
 export interface BookFavorite {
   bookid: string | number;
   fav_id: number;
@@ -68,6 +69,9 @@ export interface SessionData {
   anonymous_uuid?: string;
   anonymous_name?: string;
   initialized?: boolean;
+  // merged fields below (was duplicated further down)
+  last_activity?: Date;
+  created_at?: Date;
 }
 
 export interface ExtendedRequest extends Request {
@@ -320,14 +324,7 @@ export interface MaintenanceLog {
   error_message?: string;
 }
 
-// Session Types Extension
-export interface SessionData {
-  user_uuid?: string;
-  anonymous_uuid?: string;
-  anonymous_name?: string;
-  last_activity?: Date;
-  created_at?: Date;
-}
+// (SessionData fields merged above to avoid re-declaration)
 
 export interface SessionStats {
   total_sessions: number;

@@ -102,5 +102,4 @@ class AuthModule {
 }
 
 // Expose globally for non-module usage
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).AuthModule = (window as any).AuthModule || AuthModule;
+(window as unknown as Record<string, unknown>).AuthModule = (window as unknown as Record<string, unknown>).AuthModule || AuthModule;

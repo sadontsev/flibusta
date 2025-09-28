@@ -119,8 +119,8 @@ class AuthorService {
         paramIndex++;
       }
 
-      const whereClause = conditions.join(' AND ');
-      const offset = page * limit;
+  const whereClause = conditions.join(' AND ');
+  const offset = page * limit;
 
       // Build ORDER BY clause based on sort parameter
       let orderBy = 'a.lastname ASC, a.firstname ASC'; // default
@@ -176,8 +176,12 @@ class AuthorService {
 
       const total = parseInt((countResult?.total as string) || '0');
 
-      // Combine params with orderByParams for relevance sorting
-      const finalParams = [...params, ...orderByParams, limit, offset];
+  // Prepare parameter indices for SQL placeholders
+  const orderParams = orderByParams; // string params only used in SELECT relevance CASE
+  const limitParamIndex = params.length + orderParams.length + 1;
+  const offsetParamIndex = params.length + orderParams.length + 2;
+  // Final params for main query
+  const finalParams = [...params, ...orderParams, Number(limit), Number(offset)];
 
       // Get authors with book count in a single query for better performance
       const authors = await getRows(`
@@ -186,12 +190,12 @@ class AuthorService {
                COALESCE(book_counts.count, 0) as book_count
                ${sort === 'relevance' && query ? `,
                CASE 
-                 WHEN a.lastname ILIKE $${paramIndex} THEN 1
-                 WHEN a.firstname ILIKE $${paramIndex} THEN 2
-                 WHEN a.lastname ILIKE $${paramIndex + 1} THEN 3
-                 WHEN a.firstname ILIKE $${paramIndex + 1} THEN 4
-                 WHEN a.lastname ILIKE $${paramIndex + 2} THEN 5
-                 WHEN a.firstname ILIKE $${paramIndex + 2} THEN 6
+                 WHEN a.lastname ILIKE $${params.length + 1} THEN 1
+                 WHEN a.firstname ILIKE $${params.length + 1} THEN 2
+                 WHEN a.lastname ILIKE $${params.length + 2} THEN 3
+                 WHEN a.firstname ILIKE $${params.length + 2} THEN 4
+                 WHEN a.lastname ILIKE $${params.length + 3} THEN 5
+                 WHEN a.firstname ILIKE $${params.length + 3} THEN 6
                  ELSE 7
                END as relevance_score` : ''}
         FROM libavtorname a
@@ -205,7 +209,7 @@ class AuthorService {
         ) book_counts ON a.avtorid = book_counts.avtorid
         WHERE ${whereClause}
         ORDER BY ${orderBy}
-        LIMIT $${finalParams.length - 1} OFFSET $${finalParams.length}
+        LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
       `, finalParams);
 
       return {
