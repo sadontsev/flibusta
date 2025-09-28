@@ -341,14 +341,22 @@ router.get('/cover/:bookId', [
   const fast = (req.query.fast === '1' || req.query.fast === 'true');
   const checkOnly = (req.query.check === '1' || req.query.check === 'true');
 
-    // Get book cover info
-    const bookCover = await getRow(`
-      SELECT file FROM libbpics WHERE bookid = $1 LIMIT 1
-    `, [bookId]);
-
-  // Ensure covers cache directory exists
+  // Ensure covers cache directory exists and check cache first
   const coversCacheRoot = process.env.COVERS_CACHE_PATH || '/app/cache/covers';
   await ensureDir(coversCacheRoot);
+  const cached = await findCachedImage(coversCacheRoot, String(bookId));
+  if (cached) {
+    return res.sendFile(cached);
+  }
+
+  // Extremely fast path for probes: never touch DB, never schedule
+  if (checkOnly) {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Connection', 'close');
+    return res.status(404).end();
+  }
+
+  // Optional info logs moved after fast paths
   try {
     const stat = await fs.stat(coversCacheRoot);
     logger.info('Cover route: cache dir status', { bookId, coversCacheRoot, exists: !!stat, isDir: stat.isDirectory?.() });
@@ -356,29 +364,19 @@ router.get('/cover/:bookId', [
     logger.warn('Cover route: cache dir not accessible', { bookId, coversCacheRoot, error: (e as Error).message });
   }
 
-  // Serve from cache if present (any supported extension)
-  const cached = await findCachedImage(coversCacheRoot, String(bookId));
-  logger.info('Cover route: cache lookup', { bookId, cached });
-  if (cached) {
-    logger.info('Cover route: serving from cache', { bookId, path: cached });
-    return res.sendFile(cached);
-  }
-
-  // If this is a cache probe, do not attempt extraction or scheduling
-  if (checkOnly) {
-    // Explicit no-store to prevent caching 404s by proxies
-    res.setHeader('Cache-Control', 'no-store');
-    return res.status(404).end();
-  }
-
   if (fast) {
     // Schedule cache population only for the initial fast request, not for probes
     try { CoverCacheService.schedule(bookId); } catch {}
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'no-store');
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="#111"/><text x="50%" y="50%" fill="#888" font-size="14" text-anchor="middle" dominant-baseline="middle">cover pending</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="300"><rect width="100%" height="100%" fill="#111"/><text x="50%" y="50%" fill="#888" font-size="14" text-anchor="middle" dominant-baseline="middle">обложка ожидается</text></svg>`;
     return res.send(svg);
   }
+
+  // Get book cover info (DB), only for non-probe, non-fast requests
+  const bookCover = await getRow(`
+      SELECT file FROM libbpics WHERE bookid = $1 LIMIT 1
+    `, [bookId]);
 
   if (bookCover) {
     // Try lib.b.attached.zip exact path

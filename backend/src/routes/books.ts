@@ -44,22 +44,43 @@ router.get('/search', [
   query('genre').optional().isString().trim(),
   query('series').optional().isString().trim(),
   query('year').optional().isInt({ min: 1800, max: 2100 }),
-  query('language').optional().isString().isLength({ min: 2, max: 3 }),
+  // Accept language in forms like "ru" or "ru-RU" and normalize to primary code
+  query('language')
+    .optional()
+    .isString()
+    .matches(/^[A-Za-z]{2,3}(-[A-Za-z]{2})?$/)
+    .withMessage('Language must be a code like ru or ru-RU')
+    .bail()
+    .customSanitizer((val) => {
+      try {
+        const s = String(val || '').trim();
+        const parts = s.split('-');
+        const primary = (parts && parts.length > 0 ? parts[0] : 'ru') || 'ru';
+        return primary.slice(0, 3).toLowerCase();
+      } catch {
+        return 'ru';
+      }
+    }),
   query('sort').optional().isIn(['relevance', 'date', 'title', 'title_desc', 'author', 'author_desc', 'year', 'year_desc', 'rating', 'rating_asc']),
   query('page').optional().isInt({ min: 0 }),
   query('limit').optional().isInt({ min: 1, max: 100 })
 ], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
+    // Light normalization and safe defaults
+    const page = Math.max(0, parseInt(req.query.page as string) || 0);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 12));
+    const language = ((req.query.language as string) || 'ru').toLowerCase();
+    const sort = (req.query.sort as string) || 'relevance';
     const searchParams = {
-      query: req.query.q as string,
-      author: req.query.author as string,
-      genre: req.query.genre as string,
-      series: req.query.series as string,
-      year: req.query.year as string,
-      language: (req.query.language as string) || 'ru',
-      sort: (req.query.sort as string) || 'relevance',
-      page: parseInt(req.query.page as string) || 0,
-      limit: parseInt(req.query.limit as string) || 10
+      query: (req.query.q as string) || '',
+      author: (req.query.author as string) || '',
+      genre: (req.query.genre as string) || '',
+      series: (req.query.series as string) || '',
+      year: (req.query.year as string) || '',
+      language,
+      sort,
+      page,
+      limit
     };
 
     const result = await BookService.searchBooks(searchParams);

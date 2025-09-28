@@ -9,27 +9,32 @@ class EnhancedSearch {
   createSearchInterface() { this.createBooksSearchInterface(); this.createAuthorsSearchInterface(); }
   createBooksSearchInterface() {
     const booksSearchHtml = `
-      <div id="books-search-interface" class="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4">
-        <div class="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
-          <div class="flex-1">
+      <div id=\"books-search-interface\" class=\"bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4\">
+        <div class=\"flex items-center justify-between mb-3\">
+          <div class=\"text-white font-medium\">Фильтры поиска</div>
+          <button id=\"books-filters-toggle\" class=\"px-3 py-2 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 hover:bg-gray-700\" type=\"button\" aria-expanded=\"true\">Скрыть</button>
+        </div>
+        <div id=\"books-filters-panel\" class=\"grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-4 items-end\">
+          <div class="md:col-span-6">
             <label class="block text-sm text-gray-300 mb-1" for="books-search-query">Запрос</label>
-            <input id="books-search-query" placeholder="Название, автор..." class="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <input id="books-search-query" placeholder="Название, автор..." class="w-full px-4 py-3 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-base" />
           </div>
-          <div>
+          <div class="md:col-span-3">
             <label class="block text-sm text-gray-300 mb-1" for="books-search-genre">Жанр</label>
-            <input id="books-search-genre" placeholder="например, Фантастика" class="w-44 px-3 py-2 rounded bg-gray-900 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <input id="books-search-genre" placeholder="например, Фантастика" class="w-full px-3 py-3 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <div>
+          <div class="md:col-span-3">
             <label class="block text-sm text-gray-300 mb-1" for="books-search-series">Серия</label>
-            <input id="books-search-series" placeholder="например, Ведьмак" class="w-44 px-3 py-2 rounded bg-gray-900 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <input id="books-search-series" placeholder="например, Ведьмак" class="w-full px-3 py-3 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <div>
+
+          <div class="md:col-span-2">
             <label class="block text-sm text-gray-300 mb-1" for="books-search-year">Год</label>
-            <input id="books-search-year" type="number" min="1800" max="2100" placeholder="Год" class="w-28 px-3 py-2 rounded bg-gray-900 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <input id="books-search-year" type="number" min="1800" max="2100" placeholder="Год" class="w-full px-3 py-3 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
-          <div>
+          <div class="md:col-span-4">
             <label class="block text-sm text-gray-300 mb-1" for="books-sort-select">Сортировка</label>
-            <select id="books-sort-select" class="w-44 px-3 py-2 rounded bg-gray-900 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <select id="books-sort-select" class="w-full px-3 py-3 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
               <option value="relevance">По релевантности</option>
               <option value="date">По дате (новые)</option>
               <option value="title">Название A→Z</option>
@@ -42,9 +47,9 @@ class EnhancedSearch {
               <option value="rating_asc">Рейтинг ↑</option>
             </select>
           </div>
-          <div class="flex gap-2">
-            <button id="books-clear-filters" class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-gray-200 hover:bg-gray-700">Сброс</button>
-            <button id="books-search-button" class="px-3 py-2 rounded bg-gradient-to-r from-blue-600 to-purple-600 text-white" type="button">Найти</button>
+          <div class=\"md:col-span-6 flex gap-2 md:justify-end\">
+            <button id=\"books-clear-filters\" class=\"px-4 py-3 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 hover:bg-gray-700 w-32\">Сброс</button>
+            <button id=\"books-search-button\" class=\"px-4 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow hover:from-blue-700 hover:to-purple-700 w-32\" type=\"button\">Найти</button>
           </div>
         </div>
         <div class="text-sm text-gray-400 mt-2">Найдено: <span id="books-results-count">—</span></div>
@@ -53,8 +58,12 @@ class EnhancedSearch {
   }
   createAuthorsSearchInterface() {
     const authorsSearchHtml = `
-      <div id="authors-search-interface" class="bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4" style="display:none;">
-        <div class="flex flex-col gap-3 md:flex-row md:items-end md:gap-4">
+      <div id=\"authors-search-interface\" class=\"bg-gray-800 border border-gray-700 rounded-lg p-4 mb-4\" style=\"display:none;\">
+        <div class=\"flex items-center justify-between mb-3\">
+          <div class=\"text-white font-medium\">Фильтры авторов</div>
+          <button id=\"authors-filters-toggle\" class=\"px-3 py-2 rounded-lg bg-gray-900 border border-gray-700 text-gray-100 hover:bg-gray-700\" type=\"button\" aria-expanded=\"true\">Скрыть</button>
+        </div>
+        <div id=\"authors-filters-panel\" class=\"flex flex-col gap-3 md:flex-row md:items-end md:gap-4\">
           <div class="flex-1">
             <label class="block text-sm text-gray-300 mb-1" for="authors-search-query">Запрос</label>
             <input id="authors-search-query" placeholder="Имя автора" class="w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -81,9 +90,9 @@ class EnhancedSearch {
               <option value="books">По количеству книг</option>
             </select>
           </div>
-          <div class="flex gap-2">
-            <button id="authors-clear-filters" class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-gray-200 hover:bg-gray-700">Сброс</button>
-            <button id="authors-search-button" class="px-3 py-2 rounded bg-gradient-to-r from-blue-600 to-purple-600 text-white" type="button">Найти</button>
+          <div class=\"flex gap-2\">
+            <button id=\"authors-clear-filters\" class=\"px-4 py-2 rounded bg-gray-900 border border-gray-700 text-gray-200 hover:bg-gray-700 w-32\">Сброс</button>
+            <button id=\"authors-search-button\" class=\"px-4 py-2 rounded bg-gradient-to-r from-blue-600 to-purple-600 text-white w-32\" type=\"button\">Найти</button>
           </div>
         </div>
         <div class="text-sm text-gray-400 mt-2">Найдено: <span id="authors-results-count">—</span></div>
@@ -92,22 +101,72 @@ class EnhancedSearch {
   }
   bindEvents() { this.bindBooksSearchEvents(); this.bindAuthorsSearchEvents(); }
   bindBooksSearchEvents() {
-    const q = document.getElementById('books-search-query'); const g = document.getElementById('books-search-genre'); const s = document.getElementById('books-search-series'); const y = document.getElementById('books-search-year'); const sort = document.getElementById('books-sort-select'); const clr = document.getElementById('books-clear-filters'); const btn = document.getElementById('books-search-button');
-    q?.addEventListener('input', () => this.debouncedSearch('books'));
-    g?.addEventListener('input', () => this.debouncedSearch('books'));
-    s?.addEventListener('input', () => this.debouncedSearch('books'));
-    y?.addEventListener('input', () => this.debouncedSearch('books'));
-    sort?.addEventListener('change', () => this.debouncedSearch('books'));
+    const q = document.getElementById('books-search-query');
+    const g = document.getElementById('books-search-genre');
+    const s = document.getElementById('books-search-series');
+    const y = document.getElementById('books-search-year');
+    const sort = document.getElementById('books-sort-select');
+  const clr = document.getElementById('books-clear-filters');
+  const btn = document.getElementById('books-search-button');
+  const toggle = document.getElementById('books-filters-toggle');
+  const panel = document.getElementById('books-filters-panel');
+
+    // Only trigger search on button click or pressing Enter in any field
+    const enterHandler = (ev: KeyboardEvent) => { if (ev.key === 'Enter') { ev.preventDefault(); this.performSearch('books'); } };
+    q?.addEventListener('keypress', enterHandler);
+    g?.addEventListener('keypress', enterHandler);
+    s?.addEventListener('keypress', enterHandler);
+    y?.addEventListener('keypress', enterHandler);
+    sort?.addEventListener('keypress', enterHandler);
+
+    // Do not auto-search on typing/change
     clr?.addEventListener('click', (e) => { e.preventDefault(); this.clearBooksFilters(); });
     btn?.addEventListener('click', (e) => { e.preventDefault(); this.performSearch('books'); });
+    // Initialize collapse state from localStorage
+    const booksCollapsed = (localStorage.getItem('filtersCollapsed_books') === 'true');
+    if (booksCollapsed) {
+      panel?.classList.add('hidden');
+      toggle?.setAttribute('aria-expanded', 'false');
+      if (toggle) toggle.textContent = 'Показать';
+    } else {
+      toggle?.setAttribute('aria-expanded', 'true');
+      if (toggle) toggle.textContent = 'Скрыть';
+    }
+    toggle?.addEventListener('click', () => {
+      if (!panel || !toggle) return;
+      const isHidden = panel.classList.toggle('hidden');
+      toggle.setAttribute('aria-expanded', String(!isHidden));
+      toggle.textContent = isHidden ? 'Показать' : 'Скрыть';
+      localStorage.setItem('filtersCollapsed_books', String(isHidden));
+    });
   }
   bindAuthorsSearchEvents() {
     const q = document.getElementById('authors-search-query'); const l = document.getElementById('authors-letter-select'); const sort = document.getElementById('authors-sort-select'); const clr = document.getElementById('authors-clear-filters'); const btn = document.getElementById('authors-search-button');
+    const toggle = document.getElementById('authors-filters-toggle');
+    const panel = document.getElementById('authors-filters-panel');
     q?.addEventListener('input', () => this.debouncedSearch('authors'));
     l?.addEventListener('change', () => this.debouncedSearch('authors'));
     sort?.addEventListener('change', () => this.debouncedSearch('authors'));
     clr?.addEventListener('click', (e) => { e.preventDefault(); this.clearAuthorsFilters(); });
     btn?.addEventListener('click', (e) => { e.preventDefault(); this.performSearch('authors'); });
+
+    // Initialize collapse state from localStorage
+    const authorsCollapsed = (localStorage.getItem('filtersCollapsed_authors') === 'true');
+    if (authorsCollapsed) {
+      panel?.classList.add('hidden');
+      toggle?.setAttribute('aria-expanded', 'false');
+      if (toggle) toggle.textContent = 'Показать';
+    } else {
+      toggle?.setAttribute('aria-expanded', 'true');
+      if (toggle) toggle.textContent = 'Скрыть';
+    }
+    toggle?.addEventListener('click', () => {
+      if (!panel || !toggle) return;
+      const isHidden = panel.classList.toggle('hidden');
+      toggle.setAttribute('aria-expanded', String(!isHidden));
+      toggle.textContent = isHidden ? 'Показать' : 'Скрыть';
+      localStorage.setItem('filtersCollapsed_authors', String(isHidden));
+    });
   }
   debouncedSearch(section: string) { clearTimeout(this.searchTimeout); this.searchTimeout = setTimeout(() => this.performSearch(section), 300); }
   async performSearch(section: string) {
@@ -127,7 +186,14 @@ class EnhancedSearch {
     return {};
   }
   getSort(section: string) { if (section === 'books') return (document.getElementById('books-sort-select') as HTMLSelectElement)?.value || 'date'; if (section === 'authors') return (document.getElementById('authors-sort-select') as HTMLSelectElement)?.value || 'name'; return ''; }
-  clearBooksFilters() { (document.getElementById('books-search-query') as HTMLInputElement).value = ''; (document.getElementById('books-search-genre') as HTMLInputElement).value = ''; (document.getElementById('books-search-series') as HTMLInputElement).value = ''; (document.getElementById('books-search-year') as HTMLInputElement).value = ''; (document.getElementById('books-sort-select') as HTMLSelectElement).value = 'relevance'; this.performSearch('books'); }
+  clearBooksFilters() {
+    (document.getElementById('books-search-query') as HTMLInputElement).value = '';
+    (document.getElementById('books-search-genre') as HTMLInputElement).value = '';
+    (document.getElementById('books-search-series') as HTMLInputElement).value = '';
+    (document.getElementById('books-search-year') as HTMLInputElement).value = '';
+    (document.getElementById('books-sort-select') as HTMLSelectElement).value = 'relevance';
+    this.performSearch('books');
+  }
   clearAuthorsFilters() { (document.getElementById('authors-search-query') as HTMLInputElement).value = ''; (document.getElementById('authors-letter-select') as HTMLSelectElement).value = ''; (document.getElementById('authors-sort-select') as HTMLSelectElement).value = 'relevance'; this.performSearch('authors'); }
   showSearchInterface(section: string) { const b = document.getElementById('books-search-interface'); const a = document.getElementById('authors-search-interface'); if (b) b.style.display = 'none'; if (a) a.style.display = 'none'; if (section === 'books') { if (b) b.style.display = 'block'; } else if (section === 'authors') { if (a) a.style.display = 'block'; } }
   hideSearchInterface() { const b = document.getElementById('books-search-interface'); const a = document.getElementById('authors-search-interface'); if (b) b.style.display = 'none'; if (a) a.style.display = 'none'; }

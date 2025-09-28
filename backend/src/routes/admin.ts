@@ -383,9 +383,13 @@ router.post('/users', requireAuth, requireAdmin, async (req, res) => {
         }
 
         // Check if user already exists
+        // Cast $2 to text to avoid Postgres "could not determine data type of parameter $2" when email is NULL
         const existingUser = await query(`
-            SELECT user_uuid FROM users WHERE username = $1 OR ($2 IS NOT NULL AND email = $2)
-        `, [username, email || null]);
+            SELECT user_uuid
+            FROM users
+            WHERE username = $1
+               OR (COALESCE($2::text, '') <> '' AND email = $2::text)
+        `, [username, email ?? null]);
 
         if (existingUser.rows.length > 0) {
             res.status(400).json({

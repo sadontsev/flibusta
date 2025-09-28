@@ -122,6 +122,9 @@ class AuthorService {
   const whereClause = conditions.join(' AND ');
   const offset = page * limit;
 
+      // Determine if we should compute a total count (only when filters are applied)
+      const hasFilters = !!(query || letter);
+
       // Build ORDER BY clause based on sort parameter
       let orderBy = 'a.lastname ASC, a.firstname ASC'; // default
       let orderByParams: string[] = [];
@@ -167,14 +170,16 @@ class AuthorService {
           break;
       }
 
-      // Get total count
-      const countResult = await getRow(`
-        SELECT COUNT(*) as total
-        FROM libavtorname a
-        WHERE ${whereClause}
-      `, params);
-
-      const total = parseInt((countResult?.total as string) || '0');
+      // Get total count only when filters are applied to avoid expensive full scans for initial load
+      let total: number | undefined = undefined;
+      if (hasFilters) {
+        const countResult = await getRow(`
+          SELECT COUNT(*) as total
+          FROM libavtorname a
+          WHERE ${whereClause}
+        `, params);
+        total = parseInt((countResult?.total as string) || '0');
+      }
 
   // Prepare parameter indices for SQL placeholders
   const orderParams = orderByParams; // string params only used in SELECT relevance CASE
@@ -200,28 +205,31 @@ class AuthorService {
                END as relevance_score` : ''}
         FROM libavtorname a
         LEFT JOIN libapics ap ON a.avtorid = ap.avtorid
-        LEFT JOIN (
-          SELECT av.avtorid, COUNT(b.bookid) as count
+        LEFT JOIN LATERAL (
+          SELECT COUNT(b.bookid) as count
           FROM libavtor av
           JOIN libbook b ON av.bookid = b.bookid
-          WHERE b.deleted = '0'
-          GROUP BY av.avtorid
-        ) book_counts ON a.avtorid = book_counts.avtorid
+          WHERE av.avtorid = a.avtorid AND b.deleted = '0'
+        ) book_counts ON TRUE
         WHERE ${whereClause}
         ORDER BY ${orderBy}
         LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}
       `, finalParams);
 
+      // Compute pagination with fallback when total is omitted
+      const pageInfo: any = { page, limit, hasPrev: page > 0 };
+      if (typeof total === 'number') {
+        const pages = Math.max(1, Math.ceil(total / limit));
+        pageInfo.total = total;
+        pageInfo.pages = pages;
+        pageInfo.hasNext = page < pages - 1;
+      } else {
+        pageInfo.hasNext = (authors as any[]).length === limit;
+      }
+
       return {
         authors: authors as Author[],
-        pagination: {
-          page,
-          limit,
-          total,
-          pages: Math.ceil(total / limit),
-          hasNext: page < Math.ceil(total / limit) - 1,
-          hasPrev: page > 0
-        }
+        pagination: pageInfo
       };
     } catch (error) {
       logger.error('Error searching authors', { searchParams, error: (error as Error).message });

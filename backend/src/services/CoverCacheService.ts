@@ -30,6 +30,27 @@ class CoverCacheService {
   private queue: number[] = [];
   private running = 0;
   private concurrency = Math.max(1, Math.min(8, Number(process.env.COVERS_CONCURRENCY || 3)));
+  private progress: {
+    active: boolean;
+    mode: 'recent'|'missing'|'all';
+    limit: number;
+    processed: number;
+    cached: number;
+    errors: number;
+    startedAt: string | null;
+    lastUpdatedAt: string | null;
+    done: boolean;
+  } = {
+    active: false,
+    mode: 'missing',
+    limit: 0,
+    processed: 0,
+    cached: 0,
+    errors: 0,
+    startedAt: null,
+    lastUpdatedAt: null,
+    done: false
+  };
 
   async isCached(bookId: number): Promise<string | null> {
     const root = coversRoot();
@@ -125,17 +146,44 @@ class CoverCacheService {
       // Heuristic: try recent ids first and check cache presence quickly
       rows = await getRows(`SELECT bookid FROM libbook WHERE deleted='0' ORDER BY bookid DESC LIMIT $1`, [limit*2]);
     }
+    // initialize progress
+    this.progress.active = true;
+    this.progress.mode = mode as any;
+    this.progress.limit = limit;
+    this.progress.processed = 0;
+    this.progress.cached = 0;
+    this.progress.errors = 0;
+    this.progress.startedAt = new Date().toISOString();
+    this.progress.lastUpdatedAt = this.progress.startedAt;
+    this.progress.done = false;
+
     let processed = 0, cached = 0, errors = 0;
     for (const r of rows) {
       const id = Number(r.bookid);
-      processed++;
       try {
         const is = await this.isCached(id);
-        if (mode === 'missing' && is) continue;
+        if (mode === 'missing' && is) {
+          // skip already cached in missing mode
+          this.progress.lastUpdatedAt = new Date().toISOString();
+          continue;
+        }
+        processed++;
         const out = await this.ensureCached(id);
         if (out) cached++;
-  } catch { errors++; }
+      } catch { errors++; }
+      // update progress snapshot
+      this.progress.processed = processed;
+      this.progress.cached = cached;
+      this.progress.errors = errors;
+      this.progress.lastUpdatedAt = new Date().toISOString();
     }
+    // finalize progress
+    this.progress.processed = processed;
+    this.progress.cached = cached;
+    this.progress.errors = errors;
+    this.progress.done = true;
+    this.progress.active = false;
+    this.progress.lastUpdatedAt = new Date().toISOString();
     return { processed, cached, errors };
   }
 
@@ -144,7 +192,8 @@ class CoverCacheService {
       queue: this.queue.length,
       running: this.running,
       inFlight: this.inFlight.size,
-      concurrency: this.concurrency
+      concurrency: this.concurrency,
+      progress: { ...this.progress }
     };
   }
 }

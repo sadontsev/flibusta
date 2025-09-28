@@ -6,11 +6,12 @@
     <title>Флибуста - Домашняя библиотека</title>
     
     <!-- Tailwind CSS - Production Build -->
-    <link href="/css/tailwind.min.css" rel="stylesheet">
+        <!-- Tailwind CSS (local) -->
+    <link href="/css/tailwind.min.css?v=20250928172756" rel="stylesheet">
     <!-- Font Awesome -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <!-- Custom CSS -->
-    <link href="/css/style.css?v=20250923203844" rel="stylesheet">
+    <link href="/css/style.css?v=20250928172756" rel="stylesheet">
     
     <link rel="icon" href="/favicon.svg" sizes="any" type="image/svg+xml">
 </head>
@@ -46,7 +47,7 @@
                 
                 <div class="flex items-center space-x-4">
                     <div class="relative search-container">
-                        <input type="text" class="w-64 px-4 py-2 rounded-lg bg-white/10 text-white placeholder-gray-300 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-400" id="searchInput" placeholder="Поиск книг...">
+                        <input type="text" class="w-96 px-4 py-2 rounded-lg bg-white/10 text-white placeholder-gray-300 border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-400" id="searchInput" placeholder="Поиск книг...">
                         <button class="absolute right-2 top-2 text-gray-300 hover:text-white transition-colors" onclick="app.performSearch()">
                             <i class="fas fa-search"></i>
                         </button>
@@ -191,14 +192,14 @@
     </div>
 
     <!-- Module Scripts -->
-    <script src="/js/modules/auth.js?v=20250923203844"></script>
-    <script src="/js/modules/ui.js?v=20250923203844"></script>
-    <script src="/js/modules/api.js?v=20250923203844"></script>
-    <script src="/js/modules/display.js?v=20250923203844"></script>
-    <script src="/js/modules/progressive-loader.js?v=20250923203844"></script>
-    <script src="/js/modules/enhanced-search.js?v=20250923203844"></script>
+    <script src="/js/modules/auth.js?v=20250928172756"></script>
+    <script src="/js/modules/ui.js?v=20250928172756"></script>
+    <script src="/js/modules/api.js?v=20250928172756"></script>
+    <script src="/js/modules/display.js?v=20250928172756"></script>
+    <script src="/js/modules/progressive-loader.js?v=20250928172756"></script>
+    <script src="/js/modules/enhanced-search.js?v=20250928172756"></script>
     
     <!-- Main App -->
-    <script src="/js/app.js?v=20250923203844"></script>
+    <script src="/js/app.js?v=20250928172756"></script>
 </body>
 </html>

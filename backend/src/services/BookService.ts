@@ -190,8 +190,8 @@ class BookService {
         limit = this.recordsPerPage
       } = searchParams;
 
-      // Build cache key (avoid caching pages with high page index to limit memory)
-      const cacheKey = JSON.stringify({ q: query, author, genre, series, year, language, sort, page, limit, v: 2 });
+  // Build cache key (avoid caching pages with high page index to limit memory)
+  const cacheKey = JSON.stringify({ q: query, author, genre, series, year, language, sort, page, limit, v: 4 });
       if (page < 5) { // only cache early pages
         const cached = this.searchCache.get(cacheKey);
         if (cached && (Date.now() - cached.time) < this.cacheTTLms) {
@@ -202,13 +202,14 @@ class BookService {
   // Base conditions & parameter tracking
   const conditions: string[] = ['b.deleted = $1'];
   const params: any[] = ['0'];
-      let p = 2; // next param index
+    let p = 2; // next param index
+    let ftsParamIndex: number | null = null;
 
       // Combined title + author logic (keep semantics of previous implementation)
       // Full-text search for title if query provided. Fallback to trigram ILIKE if short or no lexemes.
       if (query) {
         // Russian FTS primary match + tokenized fallback across title and author names
-        const ftsParam = p;
+        ftsParamIndex = p;
         params.push(query); p++;
 
         // Tokenize query to handle cases like "Война и мир толстой":
@@ -242,7 +243,7 @@ class BookService {
         // Combine FTS and tokenized fallback (AND across tokens)
         const fallback = tokenConds.length ? tokenConds.join(' AND ') : '';
         const combined = fallback ? `(${fallback})` : 'TRUE';
-        conditions.push(`(b.search_vector @@ websearch_to_tsquery('russian', $${ftsParam}) OR ${combined})`);
+  conditions.push(`(b.search_vector @@ websearch_to_tsquery('russian', $${ftsParamIndex}) OR ${combined})`);
       }
       if (author) {
         // Use trigram index on concatenated author fields via expression index (already created)
@@ -283,52 +284,52 @@ class BookService {
       // Use aliases available in the outer SELECT:
       // - Columns from "base" CTE are referenced as base.* in ORDER BY
       // - LATERAL-selected aliases like primary_author_* are available directly
-      let orderBy = 'base.bookid DESC';
-      let relevanceBase: number | null = null;
-      if (sort === 'relevance' && query) {
+      let orderBy = 'bookid DESC';
+      const hasRelevance = (sort === 'relevance' && !!query);
+      if (hasRelevance) {
         // Relevance with FTS rank + simple fallback scoring
-        relevanceBase = p;
         // Using ts_rank for ordering (lower rank first if we invert? We'll use DESC to show highest relevance first)
-        // relevance_score is selected into the base CTE via relevanceSelect below
-        orderBy = 'base.relevance_score DESC, base.bookid DESC';
-        params.push(query); p++;
+        // relevance_score is selected into the base subquery via relevanceSelect below
+        orderBy = 'relevance_score DESC, bookid DESC';
       } else {
         switch (sort) {
-          case 'title': orderBy = 'base.title ASC'; break;
-          case 'title_desc': orderBy = 'base.title DESC'; break;
+          case 'title': orderBy = 'title ASC'; break;
+          case 'title_desc': orderBy = 'title DESC'; break;
           case 'author': orderBy = 'primary_author_lastname ASC NULLS LAST, primary_author_firstname ASC NULLS LAST'; break;
           case 'author_desc': orderBy = 'primary_author_lastname DESC NULLS LAST, primary_author_firstname DESC NULLS LAST'; break;
-          case 'year': orderBy = 'base.year ASC NULLS LAST'; break;
-          case 'year_desc': orderBy = 'base.year DESC NULLS FIRST'; break;
-          case 'rating': orderBy = 'base.bookid DESC'; break; // fallback: no rating column in schema
-          case 'rating_asc': orderBy = 'base.bookid ASC'; break; // fallback
+          case 'year': orderBy = 'year ASC NULLS LAST'; break;
+          case 'year_desc': orderBy = 'year DESC NULLS FIRST'; break;
+          case 'rating': orderBy = 'bookid DESC'; break; // fallback: no rating column in schema
+          case 'rating_asc': orderBy = 'bookid ASC'; break; // fallback
           case 'date':
-          default: orderBy = 'base.bookid DESC'; break;
+          default: orderBy = 'bookid DESC'; break;
         }
       }
 
-      const offset = page * limit;
-      params.push(limit, offset); // for LIMIT / OFFSET
-      const limitParamIndex = p;
-      const offsetParamIndex = p + 1;
+  const offset = page * limit;
+  const safeLimit = Math.max(1, Number(limit) || this.recordsPerPage);
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  // Build list SQL params: only the condition params; limit/offset are inlined as safe numbers
+  const listParams = [...params];
 
-  const relevanceSelect = (sort === 'relevance' && query) ? ', ts_rank(b.search_vector, websearch_to_tsquery(\'russian\', $' + (relevanceBase as number) + ')) AS relevance_score' : '';
+      const relevanceSelect = (hasRelevance && ftsParamIndex)
+        ? ", ts_rank(b.search_vector, websearch_to_tsquery('russian', $" + (ftsParamIndex as number) + ")) AS relevance_score"
+        : '';
 
-      // Single-pass query with lateral joins to avoid N+1
-      const sql = `
-        WITH base AS (
-          SELECT b.bookid, b.title, b.year, b.lang, b.filetype, b.filesize, b.time,
-                 COUNT(*) OVER() AS total_count${relevanceSelect}
-          FROM libbook b
-          WHERE ${conditions.join(' AND ')}
-        )
-        SELECT base.*, 
+      const listSql = `
+        SELECT base.bookid, base.title, base.year, base.lang, base.filetype, base.filesize, base.time${sort === 'relevance' && query ? ', base.relevance_score' : ''},
                pa.lastname AS primary_author_lastname,
                pa.firstname AS primary_author_firstname,
                pa.nickname AS primary_author_nickname,
                g3.genres AS genres_array,
                ef.effective_filetype
-        FROM base
+        FROM (
+          SELECT b.bookid, b.title, b.year, b.lang, b.filetype, b.filesize, b.time${relevanceSelect}
+          FROM libbook b
+          WHERE ${conditions.join(' AND ')}
+          ORDER BY ${orderBy}
+          LIMIT ${safeLimit} OFFSET ${safeOffset}
+        ) base
         LEFT JOIN LATERAL (
           SELECT an.lastname, an.firstname, an.nickname
           FROM libavtor a
@@ -368,12 +369,12 @@ class BookService {
             filename ASC
           LIMIT 1
         ) ef ON TRUE
-        ORDER BY ${orderBy}
-        LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex};
+        ORDER BY ${orderBy};
       `;
 
-      const rows = await getRows(sql, params);
-      const total = rows.length ? parseInt((rows[0] as any).total_count, 10) : 0;
+  try { logger.info('searchBooks:listSql params', { totalParams: listParams.length, baseParams: params.length, hasRelevance, ftsParamIndex, safeLimit, safeOffset }); } catch {}
+  const rows = await getRows(listSql, listParams);
+      const hasNext = rows.length === limit;
 
       const books = rows.map(r => {
         const authorsArr = (r as any).primary_author_lastname ? [{
@@ -392,16 +393,39 @@ class BookService {
         };
       });
 
+      // Conditionally compute total count only for real queries/filters (to avoid slow full scans on initial load)
+      let totalCount: number | undefined = undefined;
+      const hasFilters = !!(query || author || genre || series || year);
+      if (hasFilters) {
+        const countSql = `SELECT COUNT(*)::int AS total FROM libbook b WHERE ${conditions.join(' AND ')}`;
+        // Compute the highest $N placeholder used in the SQL; if extra params were appended for
+        // relevance ranking or other branches, trim them for the COUNT query to avoid bind errors.
+        const matchAll = [...countSql.matchAll(/\$(\d+)/g)];
+        const indices: number[] = [];
+        for (const m of matchAll) {
+          const grp = m[1];
+          if (typeof grp === 'string') {
+            const n = parseInt(grp, 10);
+            if (!Number.isNaN(n)) indices.push(n);
+          }
+        }
+        const maxIndex = indices.length ? Math.max(...indices) : 0;
+        const countParams = params.slice(0, maxIndex);
+        try { logger.info('searchBooks:countSql params', { totalParams: countParams.length, expected: maxIndex }); } catch {}
+        const countRow = await getRow(countSql, countParams);
+        totalCount = parseInt((countRow?.total as string) || '0', 10);
+      }
+
       const result: SearchResult = {
         books: books as any,
         pagination: {
           page,
           limit,
-          total,
-          pages: Math.ceil(total / limit),
-          hasNext: page < Math.ceil(total / limit) - 1,
+          ...(totalCount !== undefined ? { total: totalCount, pages: Math.max(1, Math.ceil(totalCount / limit)), hasNext: page < Math.ceil(totalCount / limit) - 1 } : {} as any),
+          // Fallback when total isn’t computed
+          ...(totalCount === undefined ? { hasNext } : {}),
           hasPrev: page > 0
-        }
+        } as any
       };
 
       // Insert into cache (LRU-ish eviction)

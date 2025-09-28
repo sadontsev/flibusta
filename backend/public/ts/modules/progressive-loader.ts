@@ -5,6 +5,9 @@
 class ProgressiveLoaderNG {
   app: any; currentPage = 0; isLoading = false; hasMore = true; currentSection: string | null = null; searchParams: any = {}; observer: IntersectionObserver | null = null; loadingElement: HTMLDivElement | null = null; cardSize: 'sm' | 'md' | 'lg' = 'md';
   private coverIntervals: Map<string, number> = new Map();
+  private coverQueue: string[] = [];
+  private coverInFlight = 0;
+  private readonly coverMaxConcurrent = 2;
   constructor(app: any) { this.app = app; this.init(); }
   init() {
     // Load saved tiles size preference
@@ -166,7 +169,7 @@ class ProgressiveLoaderNG {
     // Only poll when URL includes fast=1 (placeholder path)
     if (!/\bfast=1\b/.test(url)) { img.classList.remove('image-loading'); return; }
     let attempts = 0;
-    const maxAttempts = 15; // ~30s with 2s interval
+  const maxAttempts = 10; // hard stop
     const key = `cover:${bookId}`;
     // Ensure we don't duplicate intervals per image/book
     if (this.coverIntervals.has(key)) {
@@ -176,9 +179,17 @@ class ProgressiveLoaderNG {
     }
     const interval = setInterval(async () => {
       attempts++;
+      // Respect visibility: pause polling when tab hidden
+      if (document.hidden) return;
+      // Concurrency gate: if too many in flight, skip this tick
+      if (this.coverInFlight >= this.coverMaxConcurrent) return;
+      this.coverInFlight++;
       try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 1200);
         // Probe cache without scheduling
-        const probe = await fetch(`/api/files/cover/${bookId}?check=1`, { cache: 'no-store' });
+        const probe = await fetch(`/api/files/cover/${bookId}?check=1`, { cache: 'no-store', signal: controller.signal });
+        clearTimeout(t);
         if (probe.ok) {
           // Real cover is ready, swap image src (without fast) to allow browser cache
           const realUrl = `/api/files/cover/${bookId}`;
@@ -189,9 +200,12 @@ class ProgressiveLoaderNG {
           clearInterval(interval);
           this.coverIntervals.delete(key);
         }
-      } catch {}
+      } catch { /* ignore abort/network errors */ }
+      finally {
+        this.coverInFlight = Math.max(0, this.coverInFlight - 1);
+      }
       if (attempts >= maxAttempts) { clearInterval(interval); this.coverIntervals.delete(key); img.classList.remove('image-loading'); }
-    }, 2000);
+  }, 2500);
     this.coverIntervals.set(key, interval as unknown as number);
   }
   clearCoverIntervals() { for (const it of this.coverIntervals.values()) { try { clearInterval(it); } catch {} } this.coverIntervals.clear(); }

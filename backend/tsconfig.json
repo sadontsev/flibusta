@@ -32,7 +32,12 @@
       "@/utils/*": ["utils/*"],
       "@/types/*": ["types/*"]
     },
+    // Limit global type inclusion to Node; module imports (express, multer, etc.) resolve their own types
     "types": ["node"]
+  },
+  // Disable VS Code's automatic type acquisition to avoid duplicate lib picks (e.g., 'express 2')
+  "typeAcquisition": {
+    "enable": false
   },
   "include": [
     "src/**/*"

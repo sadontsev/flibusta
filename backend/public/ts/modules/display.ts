@@ -325,6 +325,27 @@ class DisplayModuleNG {
           <button class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-700" onclick="app.display.startUpdateRun('mappings')">Сопоставления</button>
           <button class="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white px-4 py-2 rounded-lg" onclick="app.display.startUpdateRun('full')">Полное обновление</button>
         </div>
+        <div class="mt-4 p-3 bg-gray-900 border border-gray-700 rounded">
+          <div class="flex items-end gap-2 flex-wrap">
+            <div>
+              <label class="block text-sm text-gray-300 mb-1" for="admin-covers-mode">Режим обложек</label>
+              <select id="admin-covers-mode" class="bg-gray-900 border border-gray-700 rounded px-2 py-2 text-gray-200">
+                <option value="missing">только отсутствующие</option>
+                <option value="recent">недавние</option>
+                <option value="all">все</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-gray-300 mb-1" for="admin-covers-limit">Лимит</label>
+              <input id="admin-covers-limit" type="number" min="1" max="5000" value="500" class="bg-gray-900 border border-gray-700 rounded px-2 py-2 text-gray-200 w-28"/>
+            </div>
+            <div class="flex-1"></div>
+            <div>
+              <label class="block text-sm text-gray-300 mb-1"> </label>
+              <button class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg" onclick="(async()=>{try{const sel=document.getElementById('admin-covers-mode'); const inp=document.getElementById('admin-covers-limit'); const mode=(sel&&sel['value'])||'missing'; const limit=parseInt((inp&&inp['value'])||'500',10)||500; const res=await app.api.apiCall('/api/admin/covers/precache',{method:'POST', body: JSON.stringify({mode,limit})}); app.ui.showToast('Успех','Предзагрузка обложек запущена','success');}catch(e){app.api.handleAPIError(e,'precacheCovers');}})()">Предзагрузить обложки</button>
+            </div>
+          </div>
+        </div>
         <div id="admin-update-progress"></div>
         ${lastDaily ? `<div class="text-gray-400 text-sm mt-3">Последнее успешное ежедневное обновление: ${new Date(lastDaily.started_at || lastDaily.completed_at || lastDaily.created_at || '').toLocaleString()}</div>` : ''}
       </div>
@@ -389,7 +410,7 @@ class DisplayModuleNG {
                   <option value="user">user</option>
                   <option value="admin">admin</option>
                 </select>
-                <button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-2 rounded" onclick="(async()=>{const u=document.getElementById('new-username'); const p=document.getElementById('new-password'); const dn=document.getElementById('new-display'); const em=document.getElementById('new-email'); const rl=document.getElementById('new-role'); const username=u&&u['value']?u['value'].trim():''; const password=p&&p['value']?p['value']:''; if(!username||username.length<3){app.ui.showToast('Ошибка','Минимум 3 символа в логине','error'); return;} if(!password||password.length<6){app.ui.showToast('Ошибка','Минимум 6 символов в пароле','error'); return;} try{const res=await fetch('/api/admin/users',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'include',body:JSON.stringify({username,password,display_name:(dn&&dn['value'])?dn['value'].trim():undefined,email:(em&&em['value'])?em['value'].trim():undefined,role:(rl&&rl['value'])?rl['value']:'user'})}); const json=await res.json(); if(!json.success){throw new Error(json.error||'Не удалось создать пользователя');} app.ui.showToast('Успех','Пользователь создан','success'); app.showAdmin();}catch(e){app.api.handleAPIError(e,'createUser');}})()">Создать</button>
+                <button id="admin-create-user-btn" type="button" class="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 py-2 rounded">Создать</button>
               </div>
             </div>
           </div>

@@ -81,7 +81,13 @@ app.use(addUserToLocals);
 app.use('/static', express.static('public'));
 app.use('/bootstrap', express.static('public/bootstrap'));
 app.use('/css', express.static('public/css'));
-app.use('/js', express.static('public/js'));
+app.use('/js', express.static('public/js', {
+    setHeaders: (res, filePath) => {
+        // If a version parameter is present, allow long cache; otherwise keep it short
+        // We can’t read query here; default to short cache to ease development
+        res.setHeader('Cache-Control', 'public, max-age=300');
+    }
+}));
 app.use('/fonts', express.static('public/fonts'));
 app.use('/webfonts', express.static('public/webfonts'));
 

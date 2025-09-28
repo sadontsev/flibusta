@@ -27,6 +27,16 @@ class APIModuleNG {
       headers: { 'Content-Type': 'application/json' }
     } as any;
     const finalOptions = { ...defaultOptions, ...options } as RequestInit;
+    // Add a timeout to avoid indefinitely pending requests
+    const timeoutMs = (options as any)?.timeoutMs ?? 12000; // 12s default
+    const controller = new AbortController();
+    const userSignal = (finalOptions as any).signal as AbortSignal | undefined;
+    const timeoutId = setTimeout(() => { try { controller.abort(); } catch {} }, timeoutMs);
+    // If caller provided a signal, hook it to also abort ours
+    if (userSignal) {
+      try { (userSignal as any).addEventListener?.('abort', () => { try { controller.abort(); } catch {} }); } catch {}
+    }
+    (finalOptions as any).signal = controller.signal as any;
     try {
       this._startTopbar();
       const response = await fetch(`${this.baseURL}${endpoint}`, finalOptions);
@@ -45,6 +55,7 @@ class APIModuleNG {
       console.error(`API call failed for ${endpoint}:`, error);
       throw error;
     } finally {
+      clearTimeout(timeoutId);
       this._stopTopbar();
     }
   }

@@ -174,21 +174,46 @@ body {
     border-color: #007bff;
 }
 
-.form-control {
-    background-color: #404040;
-    border-color: #505050;
-    color: #ffffff;
+
+/* Dark inputs for both Bootstrap text inputs and selects */
+.form-control,
+.form-select {
+    background-color: #404040 !important;
+    border-color: #505050 !important;
+    color: #ffffff !important;
 }
 
-.form-control:focus {
-    background-color: #404040;
-    border-color: #007bff;
-    color: #ffffff;
-    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+.form-control:focus,
+.form-select:focus {
+    background-color: #404040 !important;
+    border-color: #007bff !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
 }
 
 .form-control::placeholder {
-    color: #999999;
+    color: #999999 !important;
+}
+
+/* Extra certainty for Admin page (scoped by body.admin-page) */
+body.admin-page .form-control,
+body.admin-page .form-select,
+body.admin-page input,
+body.admin-page select,
+body.admin-page textarea {
+    background-color: #404040 !important;
+    border-color: #505050 !important;
+    color: #ffffff !important;
+}
+body.admin-page .form-control:focus,
+body.admin-page .form-select:focus,
+body.admin-page input:focus,
+body.admin-page select:focus,
+body.admin-page textarea:focus {
+    background-color: #404040 !important;
+    border-color: #007bff !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
 }
 
 .btn-outline-light:hover {
@@ -396,6 +421,65 @@ img[src*="data:image/svg+xml"] {
 @keyframes loading {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
+}
+
+/* Fix browser autofill colors on dark inputs (cover both Bootstrap and plain/Tailwind inputs) */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+    -webkit-text-fill-color: #ffffff !important;
+    -webkit-box-shadow: 0 0 0px 1000px #404040 inset !important;
+    box-shadow: 0 0 0px 1000px #404040 inset !important;
+    transition: background-color 5000s ease-in-out 0s !important;
+    caret-color: #ffffff !important;
+}
+
+/* Final overrides to force dark inputs everywhere (placed at end of file) */
+:root body .form-control,
+:root body .form-select,
+:root body input.form-control,
+:root body select.form-select,
+:root body textarea.form-control,
+:root body input[type="text"],
+:root body input[type="password"],
+:root body input[type="email"],
+:root body input[type="number"],
+:root body input[type="search"],
+:root body select,
+:root body textarea {
+    background-color: #404040 !important;
+    border-color: #505050 !important;
+    color: #ffffff !important;
+    appearance: none !important;
+    -webkit-appearance: none !important;
+    background-clip: padding-box !important;
+}
+:root body input:focus,
+:root body select:focus,
+:root body textarea:focus {
+    background-color: #404040 !important;
+    border-color: #007bff !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25) !important;
+}
+
+/* Generic placeholder color to keep plain inputs consistent */
+:root body input::placeholder,
+:root body textarea::placeholder {
+    color: #9ca3af !important;
+    opacity: 1 !important;
+}
+
+/* Optional: style dropdown options for dark theme where browsers allow it */
+:root body select option {
+    background-color: #1f2937 !important; /* slate-800 */
+    color: #ffffff !important;
 }
 
 /* Maintain a consistent cover aspect ratio container */

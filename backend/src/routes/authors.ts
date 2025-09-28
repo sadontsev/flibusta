@@ -2,6 +2,7 @@ import express, { Response, NextFunction } from 'express';
 import { query, param, validationResult } from 'express-validator';
 import { ExtendedRequest } from '../types';
 import AuthorService from '../services/AuthorService';
+import BookService from '../services/BookService';
 import { optionalAuth } from '../middleware/auth';
 import { getRow } from '../database/connection';
 
@@ -102,6 +103,24 @@ router.get('/:id', [
       success: true,
       data: author
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Get books by author (alias route for frontend compatibility)
+router.get('/:id/books', [
+  param('id').isInt({ min: 1 }).withMessage('Author ID must be a positive integer'),
+  query('page').optional().isInt({ min: 0 }),
+  query('limit').optional().isInt({ min: 1, max: 100 })
+], validate, async (req: ExtendedRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const authorId = parseInt(req.params.id!);
+    const page = parseInt(req.query.page as string) || 0;
+    const limit = parseInt(req.query.limit as string) || 10;
+
+    const result = await BookService.getBooksByAuthor(authorId, page, limit);
+    res.json({ success: true, data: result.books, pagination: result.pagination });
   } catch (error) {
     next(error);
   }

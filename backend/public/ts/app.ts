@@ -22,6 +22,57 @@ class FlibustaAppNG {
     this.progressiveLoader = new (window as any).ProgressiveLoader(this);
     this.enhancedSearch = new (window as any).EnhancedSearch(this);
 
+    // Bind global admin create-user handler early so inline onclick works reliably
+    (window as any)._adminCreateUser = async () => {
+      console.log('[Admin] Create user button clicked');
+      try { this.ui?.showToast?.('Создание','Обработка формы…','info'); } catch {}
+      const btn = document.getElementById('admin-create-user-btn') as HTMLButtonElement | null;
+      const u = document.getElementById('new-username') as HTMLInputElement | null;
+      const p = document.getElementById('new-password') as HTMLInputElement | null;
+      const dn = document.getElementById('new-display') as HTMLInputElement | null;
+      const em = document.getElementById('new-email') as HTMLInputElement | null;
+      const rl = document.getElementById('new-role') as HTMLSelectElement | null;
+      const username = (u?.value || '').trim();
+      const password = p?.value || '';
+      if (!username || username.length < 3) {
+        this.ui?.showToast?.('Ошибка','Минимум 3 символа в логине','error');
+        alert('Минимум 3 символа в логине');
+        return;
+      }
+      if (!password || password.length < 6) {
+        this.ui?.showToast?.('Ошибка','Минимум 6 символов в пароле','error');
+        alert('Минимум 6 символов в пароле');
+        return;
+      }
+      try {
+        if (btn) { btn.disabled = true; btn.textContent = 'Создание...'; }
+        const payload: any = { username, password };
+        if (dn?.value) payload.display_name = dn.value.trim();
+        if (em?.value) payload.email = em.value.trim();
+        payload.role = (rl?.value) || 'user';
+        const res = await fetch('/api/admin/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(payload) });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || 'Не удалось создать пользователя');
+        this.ui?.showToast?.('Успех','Пользователь создан','success');
+        this.showAdmin();
+      } catch (e: any) {
+        const msg = (e?.message || e || 'Ошибка создания пользователя').toString();
+        try { this.api?.handleAPIError?.(e, 'createUser'); } catch {}
+        if (!(document.getElementById('toast') as HTMLElement)?.style?.display) { alert(msg); }
+      } finally { if (btn) { btn.disabled = false; btn.textContent = 'Создать'; } }
+    };
+
+    // Delegated click handler as a safety net (captures events even if inline handler fails)
+    document.addEventListener('click', (ev: MouseEvent) => {
+      const target = ev.target as HTMLElement | null;
+      if (!target) return;
+      const btn = target.id === 'admin-create-user-btn' ? target : target.closest?.('#admin-create-user-btn');
+      if (btn) {
+        ev.preventDefault();
+        (window as any)._adminCreateUser?.();
+      }
+    }, true);
+
     this.init();
   }
 
@@ -170,6 +221,18 @@ class FlibustaAppNG {
     try {
       const data = await this.api.getAdminData();
       this.display.displayAdminPanel(data);
+      // Wire click listener directly to button element (no inline onclick needed)
+      setTimeout(() => {
+        const btn = document.getElementById('admin-create-user-btn');
+        if (btn && !(btn as any)._wired) {
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('[Admin] Direct click listener fired');
+            (window as any)._adminCreateUser?.();
+          });
+          (btn as any)._wired = true;
+        }
+      }, 100);
     } catch (error: any) {
       const msg = this.api.handleAPIError(error, 'showAdmin');
       this.ui.showError(msg);
@@ -209,6 +272,8 @@ class FlibustaAppNG {
 
   async showBookDetails(bookId: string) {
     try {
+      this.enhancedSearch.hideSearchInterface();
+      this.progressiveLoader.stop();
       const data = await this.api.getBookDetails(bookId);
       this.display.displayBookDetails(data);
     } catch (error: any) {
