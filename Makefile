@@ -1,7 +1,7 @@
 # Flibusta Makefile
 # Comprehensive deployment and management commands
 
-.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist
+.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre
 
 # Colors for output
 RED := \033[0;31m
@@ -22,12 +22,13 @@ help:
 	@echo "$(BLUE)Flibusta Management Commands:$(NC)"
 	@echo ""
 	@echo "$(GREEN)Deployment:$(NC)"
-	@echo "  make deploy          - Full deployment with health checks"
+	@echo "  make deploy          - Full deployment with health checks (excludes calibre build)"
 	@echo "  make quick-deploy    - Fast deployment for testing"
 	@echo "  make production-deploy - Production deployment (removes demo mode)"
 	@echo ""
 	@echo "$(GREEN)Container Management:$(NC)"
-	@echo "  make build           - Build containers"
+	@echo "  make build           - Build core containers (backend, postgres)"
+	@echo "  make build-calibre   - Build calibre container only"
 	@echo "  make up              - Start containers"
 	@echo "  make down            - Stop containers"
 	@echo "  make restart         - Restart containers"
@@ -40,6 +41,7 @@ help:
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
 	@echo "  make rebuild         - Rebuild backend only"
+	@echo "  make rebuild-calibre - Rebuild calibre only"
 	@echo "  make shell           - Open shell in backend container"
 	@echo "  make db-shell        - Open PostgreSQL shell"
 
@@ -51,11 +53,17 @@ check-docker:
 	fi
 	@echo "$(GREEN)[SUCCESS] Docker is running$(NC)"
 
-# Build containers
+# Build containers (exclude calibre by default to avoid unnecessary rebuilds)
 build: check-docker
-	@echo "$(BLUE)[INFO] Building containers...$(NC)"
-	@$(COMPOSE) build --no-cache
-	@echo "$(GREEN)[SUCCESS] Containers built successfully$(NC)"
+	@echo "$(BLUE)[INFO] Building core containers (backend, postgres)...$(NC)"
+	@$(COMPOSE) build --no-cache backend postgres
+	@echo "$(GREEN)[SUCCESS] Core containers built successfully$(NC)"
+
+# Build calibre only (on demand)
+build-calibre: check-docker
+	@echo "$(BLUE)[INFO] Building calibre container...$(NC)"
+	@$(COMPOSE) build --no-cache calibre
+	@echo "$(GREEN)[SUCCESS] Calibre container built$(NC)"
 
 # Start containers
 up: check-docker
@@ -80,9 +88,9 @@ logs:
 
 # Clean Docker cache
 clean: check-docker
-	@echo "$(BLUE)[INFO] Cleaning Docker cache...$(NC)"
-	@docker system prune -f
-	@echo "$(GREEN)[SUCCESS] Docker cache cleaned$(NC)"
+	@echo "$(BLUE)[INFO] Cleaning Docker builder cache (images preserved)...$(NC)"
+	@docker builder prune -f
+	@echo "$(GREEN)[SUCCESS] Builder cache cleaned$(NC)"
 
 # Wait for services to be ready
 wait-for-services:
@@ -192,10 +200,10 @@ deploy: check-docker
 	@echo "$(BLUE)🚀 Deploying Flibusta changes...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping existing containers...$(NC)"
 	@$(COMPOSE) down
-	@echo "$(BLUE)[INFO] Cleaning up Docker cache...$(NC)"
-	@docker system prune -f
-	@echo "$(BLUE)[INFO] Rebuilding containers...$(NC)"
-	@$(COMPOSE) build --no-cache
+	@echo "$(BLUE)[INFO] Cleaning up Docker build cache (images preserved)...$(NC)"
+	@docker builder prune -f
+	@echo "$(BLUE)[INFO] Rebuilding core containers (backend, postgres)...$(NC)"
+	@$(COMPOSE) build --no-cache backend postgres
 	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
 	@$(COMPOSE) up -d
 	@$(MAKE) wait-for-services
@@ -238,6 +246,12 @@ rebuild: check-docker
 	@echo "$(BLUE)[INFO] Rebuilding backend only...$(NC)"
 	@$(COMPOSE) build --no-cache backend
 	@echo "$(GREEN)[SUCCESS] Backend rebuilt$(NC)"
+
+# Rebuild calibre only
+rebuild-calibre: check-docker
+	@echo "$(BLUE)[INFO] Rebuilding calibre only...$(NC)"
+	@$(COMPOSE) build --no-cache calibre
+	@echo "$(GREEN)[SUCCESS] Calibre rebuilt$(NC)"
 
 # Open shell in backend container
 shell: check-docker
