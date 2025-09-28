@@ -24,7 +24,8 @@ export async function getBookZipEntry(bookId: number, requestedType?: string): P
       `, [bookId, requested]);
     if (!fileInfo || !fileInfo.filename) return null;
     const p = path.join(booksRoot, String(fileInfo.filename));
-    try { await fs.access(p); return p; } catch { return null; }
+  try { await fs.access(p); return p; }
+  catch { return null; }
   }
 
   async function scanDirForZip(): Promise<string | null> {
@@ -57,7 +58,8 @@ export async function getBookZipEntry(bookId: number, requestedType?: string): P
         return a.start - b.start;
       });
       return candidates[0]?.full || null;
-    } catch { return null; }
+  }
+  catch { return null; }
   }
 
   let zipPath = await tryDbMapping();
@@ -76,7 +78,7 @@ export async function getBookZipEntry(bookId: number, requestedType?: string): P
     return entryNameLower.endsWith(`/${fileNameLower}`) || entryNameLower === fileNameLower || entryNameLower.includes(`/${fileNameLower}`);
   };
 
-  let found: any = null;
+  let found: AdmZip.IZipEntry | null = null;
   if (bookFilename) {
     found = entries.find(e => entryNameMatches(toLower(e.entryName), bookFilename!)) || null;
   }
@@ -86,8 +88,8 @@ export async function getBookZipEntry(bookId: number, requestedType?: string): P
   const baseExts = ['fb2', 'epub', 'djvu', 'pdf', 'mobi', 'txt', 'rtf', 'html', 'htm'];
   const preferredExts = Array.from(new Set([archiveType, requested, ...baseExts].filter(Boolean)));
   if (!found) {
-    for (const ext of preferredExts) {
-      const candidate = `${bookId}.${ext}`;
+  for (const _ext of preferredExts) {
+  const candidate = `${bookId}.${_ext}`;
       const f = entries.find(e => {
         const name = toLower(e.entryName).split('/').pop() || '';
         return name === candidate;
@@ -96,14 +98,14 @@ export async function getBookZipEntry(bookId: number, requestedType?: string): P
     }
   }
   if (!found) {
-    for (const ext of preferredExts) {
-      const candidate = `${bookId}.${ext}`;
+  for (const _ext of preferredExts) {
+  const candidate = `${bookId}.${_ext}`;
       const f = entries.find(e => toLower(e.entryName).endsWith('/' + candidate));
       if (f) { found = f; break; }
     }
   }
   if (!found) {
-    for (const ext of preferredExts) {
+  for (const _ext of preferredExts) {
       const f = entries.find(e => /(^|\/)\d+\.[a-z0-9]+$/i.test(e.entryName) && toLower(e.entryName).includes(`/${bookId}.`));
       if (f) { found = f; break; }
     }
@@ -117,22 +119,26 @@ export async function getBookZipEntry(bookId: number, requestedType?: string): P
 export function extractCoverFromFb2(fb2Buffer: Buffer): Buffer | null {
   try {
     const xml = fb2Buffer.toString('utf8');
-    const coverIdMatch = xml.match(/<binary[^>]*id=["']([^"']*cover[^"']*)["'][^>]*>([\s\S]*?)<\/binary>/i);
+  const coverIdMatch = xml.match(/<binary[^>]*id=["']([^"']*cover[^"']*)["'][^>]*>([\s\S]*?)<\/binary>/i);
     if (coverIdMatch && coverIdMatch[2]) {
       const b64 = coverIdMatch[2].replace(/\s+/g, '');
-      try { return Buffer.from(b64, 'base64'); } catch {}
+  try { return Buffer.from(b64, 'base64'); }
+  catch {}
     }
-    const imgBinaryMatch = xml.match(/<binary[^>]*content-type=["']image\/(?:jpeg|jpg|png|gif|webp)["'][^>]*>([\s\S]*?)<\/binary>/i);
+  const imgBinaryMatch = xml.match(/<binary[^>]*content-type=["']image\/(?:jpeg|jpg|png|gif|webp)["'][^>]*>([\s\S]*?)<\/binary>/i);
     if (imgBinaryMatch && imgBinaryMatch[1]) {
       const b64 = imgBinaryMatch[1].replace(/\s+/g, '');
-      try { return Buffer.from(b64, 'base64'); } catch {}
+  try { return Buffer.from(b64, 'base64'); }
+  catch {}
     }
-    const anyBinaryMatch = xml.match(/<binary[^>]*id=["'][^"']*(?:jpg|jpeg|png|cover)[^"']*["'][^>]*>([\s\S]*?)<\/binary>/i);
+  const anyBinaryMatch = xml.match(/<binary[^>]*id=["'][^"']*(?:jpg|jpeg|png|cover)[^"']*["'][^>]*>([\s\S]*?)<\/binary>/i);
     if (anyBinaryMatch && anyBinaryMatch[1]) {
       const b64 = anyBinaryMatch[1].replace(/\s+/g, '');
-      try { return Buffer.from(b64, 'base64'); } catch {}
+  try { return Buffer.from(b64, 'base64'); }
+  catch {}
     }
-  } catch {}
+  }
+  catch {}
   return null;
 }
 
@@ -141,18 +147,18 @@ export function extractCoverFromEpub(epubBuffer: Buffer): Buffer | null {
   try {
     const zip = new AdmZip(epubBuffer);
     const entries = zip.getEntries();
-    const getEntry = (name: string) => {
+  const getEntry = (name: string) => {
       const n = name.replace(/\\/g, '/');
       return entries.find(e => e.entryName.toLowerCase() === n.toLowerCase());
     };
-    const readText = (e: any) => e ? e.getData().toString('utf8') : '';
+  const readText = (e: AdmZip.IZipEntry | undefined) => e ? e.getData().toString('utf8') : '';
 
     const container = getEntry('META-INF/container.xml');
     let opfPath = '';
     if (container) {
       const xml = readText(container);
       const m = xml.match(/full-path=["']([^"']+)["']/i);
-      if (m) opfPath = m[1];
+      if (m && m[1]) opfPath = m[1];
     }
     if (opfPath) {
       const opf = getEntry(opfPath);
@@ -163,15 +169,15 @@ export function extractCoverFromEpub(epubBuffer: Buffer): Buffer | null {
         if (meta) {
           const coverId = meta[1];
           const itemMatch = opfXml.match(new RegExp(`<item[^>]*id=["']${coverId}["'][^>]*href=["']([^"']+)["'][^>]*>`, 'i'));
-          if (itemMatch) coverHref = itemMatch[1];
+          if (itemMatch && itemMatch[1]) coverHref = itemMatch[1];
         }
         if (!coverHref) {
           const guideMatch = opfXml.match(/<reference[^>]*type=["']cover["'][^>]*href=["']([^"']+)["'][^>]*>/i);
-          if (guideMatch) coverHref = guideMatch[1];
+          if (guideMatch && guideMatch[1]) coverHref = guideMatch[1];
         }
         if (!coverHref) {
           const propsMatch = opfXml.match(/<item[^>]*properties=["'][^"']*cover-image[^"']*["'][^>]*href=["']([^"']+)["'][^>]*>/i);
-          if (propsMatch) coverHref = propsMatch[1];
+          if (propsMatch && propsMatch[1]) coverHref = propsMatch[1];
         }
         if (coverHref) {
           const baseDir = opfPath.split('/').slice(0, -1).join('/');
@@ -189,6 +195,7 @@ export function extractCoverFromEpub(epubBuffer: Buffer): Buffer | null {
       imageEntries.sort((a, b) => b.header.size - a.header.size);
       if (imageEntries[0]) return imageEntries[0]!.getData();
     }
-  } catch {}
+  }
+  catch {}
   return null;
 }

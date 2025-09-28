@@ -1,6 +1,5 @@
 import { query } from './connection';
 import logger from '../utils/logger';
-import bcrypt from 'bcryptjs';
 
 interface MigrationResult {
     success: boolean;

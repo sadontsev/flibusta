@@ -19,7 +19,8 @@ function detectImageExt(buf: Buffer): 'jpg' | 'jpeg' | 'png' | 'gif' | 'webp' | 
 }
 
 async function ensureDir(p: string) {
-  try { await fs.mkdir(p, { recursive: true }); } catch {}
+  try { await fs.mkdir(p, { recursive: true }); }
+  catch {}
 }
 
 function coversRoot() { return process.env.COVERS_CACHE_PATH || '/app/cache/covers'; }
@@ -35,7 +36,8 @@ class CoverCacheService {
     const exts = ['jpg','jpeg','png','gif','webp'];
     for (const ext of exts) {
       const p = path.join(root, `${bookId}.${ext}`);
-      try { await fs.access(p); return p; } catch {}
+      try { await fs.access(p); return p; }
+      catch {}
     }
     return null;
   }
@@ -83,12 +85,13 @@ class CoverCacheService {
             await fs.writeFile(out, buf);
             return out;
           }
-        } catch (e) {
+        } catch (_e) {
           // fall through to extraction from book file
-          logger.debug('lib.b cover extraction failed, fallback to book file', { bookId, error: (e as Error).message });
+          logger.debug('lib.b cover extraction failed, fallback to book file', { bookId, error: (_e as Error).message });
         }
       }
-    } catch {}
+  }
+  catch {}
 
     // Fallback: open the book file and extract cover (fb2/epub)
     try {
@@ -104,8 +107,8 @@ class CoverCacheService {
         await fs.writeFile(out, buf);
         return out;
       }
-    } catch (e) {
-      logger.debug('Fallback cover extraction failed', { bookId, error: (e as Error).message });
+    } catch (_e) {
+      logger.debug('Fallback cover extraction failed', { bookId, error: (_e as Error).message });
     }
     return null;
   }
@@ -113,7 +116,7 @@ class CoverCacheService {
   async precacheAll(opts?: { limit?: number; mode?: 'recent'|'missing'|'all' }): Promise<{ processed: number; cached: number; errors: number; }>{
     const limit = Math.max(1, Math.min(5000, opts?.limit || 1000));
     const mode = opts?.mode || 'missing';
-    let rows: any[] = [];
+  let rows: Array<{ bookid: number }> = [];
     if (mode === 'recent') {
       rows = await getRows(`SELECT bookid FROM libbook WHERE deleted='0' ORDER BY bookid DESC LIMIT $1`, [limit]);
     } else if (mode === 'all') {
@@ -131,7 +134,7 @@ class CoverCacheService {
         if (mode === 'missing' && is) continue;
         const out = await this.ensureCached(id);
         if (out) cached++;
-      } catch (e) { errors++; }
+  } catch { errors++; }
     }
     return { processed, cached, errors };
   }

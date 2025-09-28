@@ -4,6 +4,7 @@
 // attach it to window.ProgressiveLoader for backward compatibility.
 class ProgressiveLoaderNG {
   app: any; currentPage = 0; isLoading = false; hasMore = true; currentSection: string | null = null; searchParams: any = {}; observer: IntersectionObserver | null = null; loadingElement: HTMLDivElement | null = null; cardSize: 'sm' | 'md' | 'lg' = 'md';
+  private coverIntervals: Map<string, number> = new Map();
   constructor(app: any) { this.app = app; this.init(); }
   init() {
     // Load saved tiles size preference
@@ -27,7 +28,11 @@ class ProgressiveLoaderNG {
     this.observer = new IntersectionObserver((entries) => { entries.forEach(entry => { if (entry.isIntersecting && !this.isLoading && this.hasMore) { this.loadMore(); } }); }, { rootMargin: '100px' });
   }
   start(section: string, searchParams: any = {}) { this.currentSection = section; this.searchParams = { ...searchParams }; this.currentPage = 0; this.isLoading = false; this.hasMore = true; this.clearContentPreservingSearch(); this.showInitialSkeleton(); this.loadMore(true); }
-  clearContentPreservingSearch() { const contentArea = document.getElementById('contentArea'); if (!contentArea) return; const booksInterface = document.getElementById('books-search-interface'); const authorsInterface = document.getElementById('authors-search-interface'); contentArea.innerHTML = ''; if (booksInterface) contentArea.appendChild(booksInterface); if (authorsInterface) contentArea.appendChild(authorsInterface); }
+  clearContentPreservingSearch() {
+    // Stop any existing cover polling timers when clearing content
+    try { this.clearCoverIntervals(); } catch {}
+    const contentArea = document.getElementById('contentArea'); if (!contentArea) return; const booksInterface = document.getElementById('books-search-interface'); const authorsInterface = document.getElementById('authors-search-interface'); contentArea.innerHTML = ''; if (booksInterface) contentArea.appendChild(booksInterface); if (authorsInterface) contentArea.appendChild(authorsInterface);
+  }
   async loadMore(isFirstPage = false) {
     if (this.isLoading || (!isFirstPage && !this.hasMore)) return; this.isLoading = true; if (!isFirstPage) this.showLoadingIndicator();
     try {
@@ -115,7 +120,21 @@ class ProgressiveLoaderNG {
     </div>`;
   }
   renderAuthorCard(author: any) { const authorName = `${author.lastname} ${author.firstname} ${author.nickname || ''}`.trim(); return `<div class="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 p-6 enhanced-card"><div class="text-center"><div class="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-user text-white text-2xl"></i></div><h3 class="text-lg font-semibold text-white mb-2 line-clamp-2" title="${authorName}">${authorName}</h3><p class="text-gray-400 text-sm mb-4">Книг: ${author.book_count || 0}</p><button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 transform hover:scale-105" onclick="app.showAuthorBooks('${author.avtorid}')"><i class="fas fa-books mr-2"></i>Книги автора</button></div></div>`; }
-  appendContent(data: any[]) { const container = document.getElementById(`${this.currentSection}-grid`); if (!container) return; data.forEach(item => { const cardHtml = this.currentSection === 'books' ? this.renderBookCard(item) : this.renderAuthorCard(item); const tempDiv = document.createElement('div'); tempDiv.innerHTML = cardHtml; container.appendChild(tempDiv.firstElementChild as Element); }); }
+  appendContent(data: any[]) {
+    const container = document.getElementById(`${this.currentSection}-grid`);
+    if (!container) return;
+    const newlyAdded: Element[] = [];
+    data.forEach(item => {
+      const cardHtml = this.currentSection === 'books' ? this.renderBookCard(item) : this.renderAuthorCard(item);
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = cardHtml;
+      const el = tempDiv.firstElementChild as Element;
+      container.appendChild(el);
+      newlyAdded.push(el);
+    });
+    // After appending, run cover poller only within newly added nodes
+    try { newlyAdded.forEach(el => this.onContentRendered(el)); } catch {}
+  }
   updatePagination(pagination: any) { this.hasMore = pagination.hasNext; if (this.hasMore) this.observeLoadingElement(); else this.unobserveLoadingElement(); }
   showLoadingIndicator() { const container = document.getElementById(`${this.currentSection}-grid`); if (container && this.loadingElement) container.appendChild(this.loadingElement); }
   hideLoadingIndicator() { if (this.loadingElement?.parentNode) this.loadingElement.parentNode.removeChild(this.loadingElement); }
@@ -123,11 +142,21 @@ class ProgressiveLoaderNG {
   unobserveLoadingElement() { if (this.loadingElement && this.observer) this.observer.unobserve(this.loadingElement); }
   getPageSize() { switch (this.currentSection) { case 'books': return 12; case 'authors': return 20; default: return 10; } }
   stop() { this.unobserveLoadingElement(); this.isLoading = false; this.hasMore = false; this.currentSection = null; }
-  updateSearchParams(newParams: any) { this.searchParams = { ...newParams }; this.currentPage = 0; this.hasMore = true; this.loadMore(true); }
+  updateSearchParams(newParams: any) {
+    this.searchParams = { ...newParams };
+    this.currentPage = 0;
+    this.hasMore = true;
+    // Clear current content but preserve search UI and cancel any ongoing cover polling
+    this.clearContentPreservingSearch();
+    this.showInitialSkeleton();
+    this.loadMore(true);
+  }
 
   // After content render, scan for images with ?fast=1 placeholder and set up polling to replace when ready
-  onContentRendered() {
-    const imgs = Array.from(document.querySelectorAll('img[data-bookid][data-cover]')) as HTMLImageElement[];
+  // Important: do NOT clear existing intervals here; otherwise attempts reset repeatedly causing endless pending requests
+  onContentRendered(container?: Element | Document) {
+    const scope: Element | Document = container || document;
+    const imgs = Array.from(scope.querySelectorAll('img[data-bookid][data-cover]')) as HTMLImageElement[];
     imgs.forEach(img => this.attachCoverPoller(img));
   }
   attachCoverPoller(img: HTMLImageElement) {
@@ -138,6 +167,13 @@ class ProgressiveLoaderNG {
     if (!/\bfast=1\b/.test(url)) { img.classList.remove('image-loading'); return; }
     let attempts = 0;
     const maxAttempts = 15; // ~30s with 2s interval
+    const key = `cover:${bookId}`;
+    // Ensure we don't duplicate intervals per image/book
+    if (this.coverIntervals.has(key)) {
+      // Poller for this book already running; do not reset attempts
+      img.classList.add('image-loading');
+      return;
+    }
     const interval = setInterval(async () => {
       attempts++;
       try {
@@ -151,13 +187,15 @@ class ProgressiveLoaderNG {
           img.onerror = () => { /* keep existing placeholder */ };
           img.src = realUrl;
           clearInterval(interval);
+          this.coverIntervals.delete(key);
         }
       } catch {}
-      if (attempts >= maxAttempts) { clearInterval(interval); img.classList.remove('image-loading'); }
+      if (attempts >= maxAttempts) { clearInterval(interval); this.coverIntervals.delete(key); img.classList.remove('image-loading'); }
     }, 2000);
+    this.coverIntervals.set(key, interval as unknown as number);
   }
+  clearCoverIntervals() { for (const it of this.coverIntervals.values()) { try { clearInterval(it); } catch {} } this.coverIntervals.clear(); }
 }
 
 // Expose under the expected global name used by app.ts
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).ProgressiveLoader = (window as any).ProgressiveLoader || ProgressiveLoaderNG;
+(window as unknown as Record<string, unknown>).ProgressiveLoader = (window as unknown as Record<string, unknown>).ProgressiveLoader || ProgressiveLoaderNG;

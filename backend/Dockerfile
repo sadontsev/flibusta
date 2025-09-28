@@ -25,7 +25,7 @@ ENV NODE_ENV=production \
 
 # System deps needed for rendering
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  curl wget xz-utils ca-certificates fontconfig python3 \
+  curl wget xz-utils ca-certificates fontconfig python3 postgresql-client \
     libx11-6 libnss3 libxrender1 libxext6 libxi6 libglib2.0-0 libgl1 libuuid1 \
     libegl1 libopengl0 libxcb-cursor0 libxkbcommon0 libxkbcommon-x11-0 \
   && rm -rf /var/lib/apt/lists/*

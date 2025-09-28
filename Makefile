@@ -1,7 +1,7 @@
 # Flibusta Makefile
 # Comprehensive deployment and management commands
 
-.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre
+.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre lint lint-fix
 
 # Colors for output
 RED := \033[0;31m
@@ -38,6 +38,8 @@ help:
 	@echo "$(GREEN)Testing & Health:$(NC)"
 	@echo "  make health-check    - Check application health"
 	@echo "  make test            - Run API tests"
+	@echo "  make lint            - Run ESLint across backend (server + frontend TS)"
+	@echo "  make lint-fix        - Run ESLint with --fix"
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
 	@echo "  make rebuild         - Rebuild backend only"
@@ -302,3 +304,12 @@ db-persist: check-docker
 	@$(COMPOSE) exec -T postgres psql -U flibusta -d flibusta -c "SELECT count(*) FROM persist_check WHERE label='marker';" | tail -n +3 | head -n 1 | grep -q "1" && \
 	  echo "$(GREEN)[SUCCESS] DB persistence OK (marker row present)$(NC)" || \
 	  (echo "$(RED)[ERROR] DB persistence check failed (marker row missing)$(NC)"; exit 1)
+
+# Lint code (backend project)
+lint:
+	@echo "$(BLUE)[INFO] Running ESLint (backend)…$(NC)"
+	@cd backend && npm run lint
+
+lint-fix:
+	@echo "$(BLUE)[INFO] Running ESLint with autofix (backend)…$(NC)"
+	@cd backend && npm run lint:fix

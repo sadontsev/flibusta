@@ -1,5 +1,5 @@
 import express from 'express';
-import { requireAuth, requireRole, requireAdmin } from '../middleware/auth';
+import { requireAuth, requireAdmin } from '../middleware/auth';
 import { query } from '../database/connection';
 import logger from '../utils/logger';
 import UpdateService from '../services/UpdateService';

@@ -112,7 +112,7 @@ git clone <repository-url>
 cd flibusta
 
 # Start the application
-docker-compose up -d
+docker compose up -d
 
 # Access the application
 open http://localhost:27102
@@ -271,7 +271,18 @@ docker-compose logs backend
 docker-compose restart
 
 # Rebuild containers
-docker-compose up -d --build
+docker compose up -d --build
+
+## 🧹 Housekeeping: Legacy scripts consolidated
+
+Legacy shell scripts at the repo root have been archived. Prefer the Node manage CLI and Admin API instead:
+
+- Download SQL: npm --prefix backend run manage download-sql
+- Download covers: npm --prefix backend run manage download-covers
+- Daily updates: npm --prefix backend run manage update-daily
+- Update mappings: via Admin UI or npm --prefix backend run manage update-zip-mappings
+
+If you previously used getsql.sh, setup_complete.sh, linux-installer.sh, or manage_nodejs.sh, see archive/legacy-scripts for stubs and notes.
 ```
 
 ---

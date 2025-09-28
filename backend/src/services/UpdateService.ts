@@ -2,7 +2,6 @@ import fs from 'fs/promises';
 import path from 'path';
 import https from 'https';
 import http from 'http';
-import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -65,8 +64,55 @@ class UpdateService {
         this.sqlDir = process.env.SQL_PATH || '/app/sql';
         this.booksDir = process.env.BOOKS_PATH || '/app/flibusta';
         this.cacheDir = process.env.CACHE_PATH || '/app/cache';
-        // Allow overriding the mappings SQL path; default to container path
-        this.mappingsSqlPath = process.env.MAPPINGS_SQL_PATH || '/app/populate_book_mappings.sql';
+    // Allow overriding the mappings SQL path; default to /app/sql mounted from host
+    this.mappingsSqlPath = process.env.MAPPINGS_SQL_PATH || '/app/sql/populate_book_mappings.sql';
+    }
+
+    // Attempt to resolve mappings SQL from multiple locations for local/dev runs
+    private async resolveMappingsPath(): Promise<string | null> {
+        const candidates: string[] = [];
+        // 1) Explicit env path
+        candidates.push(this.mappingsSqlPath);
+        // 2) SQL_PATH directory with default file name
+        if (this.sqlDir) candidates.push(path.join(this.sqlDir, 'populate_book_mappings.sql'));
+        // 3) CWD-relative FlibustaSQL (repo root usage)
+        try { candidates.push(path.resolve(process.cwd(), 'FlibustaSQL/populate_book_mappings.sql')); } catch {}
+        // 4) Relative to compiled file location back to repo root
+        try { candidates.push(path.resolve(__dirname, '../../../FlibustaSQL/populate_book_mappings.sql')); } catch {}
+        for (const p of candidates) {
+            try { await fs.access(p); return p; } catch {}
+        }
+        return null;
+    }
+
+    // Fetch text via HTTP(S) with a simple timeout and error handling
+    private async fetchText(url: string, timeoutMs = 15000): Promise<string> {
+        const isHttps = url.startsWith('https:');
+        const client = isHttps ? https : http;
+        return await new Promise<string>((resolve, reject) => {
+            const req = client.get(url, (res) => {
+                const status = res.statusCode || 0;
+                if (status >= 300 && status < 400 && res.headers.location) {
+                    // Follow one redirect
+                    const next = res.headers.location.startsWith('http') ? res.headers.location : new URL(res.headers.location, url).toString();
+                    this.fetchText(next, timeoutMs).then(resolve).catch(reject);
+                    res.resume();
+                    return;
+                }
+                if (status !== 200) {
+                    reject(new Error(`HTTP ${status}: ${res.statusMessage || ''}`));
+                    res.resume();
+                    return;
+                }
+                const chunks: Buffer[] = [];
+                res.on('data', (d) => chunks.push(Buffer.isBuffer(d) ? d : Buffer.from(d)));
+                res.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+            });
+            req.on('error', reject);
+            req.setTimeout(timeoutMs, () => {
+                try { req.destroy(new Error('Request timeout')); } catch {}
+            });
+        });
     }
 
     async downloadFile(url: string, destination: string): Promise<string> {
@@ -109,7 +155,7 @@ class UpdateService {
 
     async executeSqlFile(sqlPath: string): Promise<SqlExecutionResult> {
         try {
-            const { stdout, stderr } = await execAsync(
+            const { stderr } = await execAsync(
                 `psql -h ${process.env.DB_HOST} -p ${process.env.DB_PORT} -U ${process.env.DB_USER} -d ${process.env.DB_NAME} -f "${sqlPath}"`,
                 { env: { ...process.env, PGPASSWORD: process.env.DB_PASSWORD } }
             );
@@ -316,7 +362,7 @@ class UpdateService {
 
             for (const arch of archives) {
                 const dest = path.join(this.cacheDir, arch.name);
-                let action: 'skipped' | 'downloaded' | 'failed' = 'skipped';
+                let _action: 'skipped' | 'downloaded' | 'failed' = 'skipped';
                 let message = 'Already present';
                 try {
                     this.progress!.step = 'Checking';
@@ -339,14 +385,14 @@ class UpdateService {
                         this.progress!.message = `Downloading ${arch.name}`;
                         this.progress!.updatedAt = new Date().toISOString();
                         await this.downloadFile(arch.url, dest);
-                        action = 'downloaded';
+                        _action = 'downloaded';
                         message = 'Downloaded successfully';
                     }
 
                     results.push({ file: arch.name, status: 'success', message });
                     this.progress!.successes += 1;
                 } catch (err) {
-                    action = 'failed';
+                    _action = 'failed';
                     message = (err as Error).message;
                     logger.error(`Failed to ensure ${arch.name}:`, err);
                     results.push({ file: arch.name, status: 'error', message });
@@ -404,21 +450,20 @@ class UpdateService {
                 message: 'Running mappings SQL'
             };
 
-            // Ensure the SQL file exists
-            try {
-                await fs.access(this.mappingsSqlPath);
-            } catch {
+            // Resolve SQL path (supports local dev fallbacks)
+            const sqlPath = await this.resolveMappingsPath();
+            if (!sqlPath) {
                 this.isRunning = false;
                 this.currentOperation = '';
                 return {
                     file: 'book_mappings',
                     status: 'error',
-                    message: `Mappings SQL not found at ${this.mappingsSqlPath}. Set MAPPINGS_SQL_PATH or place the file at that location.`
+                    message: `Mappings SQL not found. Tried MAPPINGS_SQL_PATH (${this.mappingsSqlPath}) and common fallbacks (FlibustaSQL/populate_book_mappings.sql).`
                 };
             }
 
             // Execute using psql (same path as other SQL files)
-            await this.executeSqlFile(this.mappingsSqlPath);
+            await this.executeSqlFile(sqlPath);
             this.progress.successes = 1;
             this.progress.currentIndex = 1;
 
@@ -445,24 +490,39 @@ class UpdateService {
     }
 
     async getDailyFileList(): Promise<string[]> {
-        // Mock implementation - in real scenario this would fetch from server
+        // Fetch the daily directory index and pick the latest date per known extension
+        const exts = ['fb2', 'epub', 'djvu', 'pdf', 'mobi', 'txt'] as const;
+        const url = this.dailyUrl;
+        try {
+            const html = await this.fetchText(url, Number(process.env.HTTP_TIMEOUT_MS || 15000));
+            // Extract filenames like f.fb2.20250927.zip (from anchor href/text)
+            const rx = /f\.(fb2|epub|djvu|pdf|mobi|txt)\.(\d{8})\.zip/gi;
+            const latest: Record<string, string> = {};
+            let m: RegExpExecArray | null;
+            while ((m = rx.exec(html)) !== null) {
+                const ext = (m[1] || '').toLowerCase();
+                const date = m[2] || '';
+                const fname = `f.${ext}.${date}.zip`;
+                const cur = latest[ext];
+                const curDate = cur ? (cur.split('.')[2] || '') : '';
+                if (!cur || curDate < date) {
+                    latest[ext] = fname;
+                }
+            }
+            const files: string[] = [];
+            for (const e of exts) {
+                if (latest[e]) files.push(latest[e]);
+            }
+            if (files.length > 0) return files;
+        } catch (e) {
+            logger.warn('Failed to fetch daily index; falling back to heuristic list', { error: (e as Error).message });
+        }
+        // Fallback: yesterday for common types
         const today = new Date();
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        
-        const formatDate = (date: Date): string => {
-            const isoString = date.toISOString();
-            if (isoString) {
-                return isoString.split('T')[0]?.replace(/-/g, '') || '';
-            }
-            return '';
-        };
-        
-        return [
-            `f.fb2.${formatDate(yesterday)}.zip`,
-            `f.epub.${formatDate(yesterday)}.zip`,
-            `f.djvu.${formatDate(yesterday)}.zip`
-        ];
+        const ymd = yesterday.toISOString().split('T')[0]?.replace(/-/g, '') || '';
+        return [`f.fb2.${ymd}.zip`, `f.epub.${ymd}.zip`, `f.djvu.${ymd}.zip`];
     }
 
     getUpdateStatus(): UpdateStatus {

@@ -1,9 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { execSync, spawn } from 'child_process';
-import { getRows, getRow, query } from '../database/connection';
+import { execSync } from 'child_process';
+import { getRow, query } from '../database/connection';
 import logger from '../utils/logger';
 import { DatabaseStats, HealthCheckResult } from '../types/index';
+import UpdateService from '../services/UpdateService';
 
 interface DownloadResult {
     success: boolean;
@@ -99,10 +100,12 @@ class DatabaseManager {
         logger.info('Starting cover files download...');
         
         try {
-            execSync('/app/getcovers.sh');
+            const updater = new UpdateService();
+            const results = await updater.updateCovers();
+            const ok = results.every(r => r.status === 'success');
             return {
-                success: true,
-                message: 'Cover files downloaded successfully'
+                success: ok,
+                message: ok ? 'Cover files ensured/updated successfully' : 'Some cover updates failed; check logs'
             };
         } catch (error) {
             logger.error('Cover files download failed:', error);
@@ -120,12 +123,12 @@ class DatabaseManager {
         logger.info('Starting daily books update...');
         
         try {
-            // Execute daily update script
-            execSync('/app/update_daily_local.sh');
-            
+            const updater = new UpdateService();
+            const results = await updater.updateDailyBooks();
+            const ok = results.every(r => r.status === 'success');
             return {
-                success: true,
-                message: 'Daily books updated successfully'
+                success: ok,
+                message: ok ? 'Daily books downloaded successfully' : 'Some daily downloads failed; check logs'
             };
         } catch (error) {
             logger.error('Daily books update failed:', error);
@@ -310,7 +313,7 @@ class DatabaseManager {
      */
     async getDatabaseStats(): Promise<DatabaseStats> {
         try {
-            const [books, tables, dbSize] = await Promise.all([
+            const [/* books */, tables, dbSize] = await Promise.all([
                 getRow('SELECT COUNT(*) as count FROM libbook WHERE deleted = \'0\''),
                 getRow('SELECT count(*) as count FROM information_schema.tables WHERE table_schema = \'public\''),
                 getRow('SELECT pg_size_pretty(pg_database_size(current_database())) as size')

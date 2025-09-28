@@ -3,12 +3,11 @@ import fs from 'fs/promises';
 import AdmZip from 'adm-zip';
 import { parseStringPromise } from 'xml2js';
 import { spawn } from 'child_process';
-import http from 'http';
-import https from 'https';
+import { IncomingMessage, RequestOptions as HttpRequestOptions, request as httpRequest } from 'http';
+import { RequestOptions as HttpsRequestOptions, request as httpsRequest } from 'https';
 import logger from '../utils/logger';
 import { extractCoverFromFb2 } from '../utils/cover';
 
-/** Supported target formats (extendable) */
 export type TargetFormat = 'epub' | 'mobi' | 'azw3' | 'pdf' | 'txt' | 'rtf' | 'html';
 
 const ALL_TARGETS: TargetFormat[] = ['epub', 'mobi', 'azw3', 'pdf', 'txt', 'rtf', 'html'];
@@ -29,7 +28,8 @@ function conversionCachePath(bookId: number, format: TargetFormat): string {
 }
 
 async function ensureDir(p: string) {
-  try { await fs.mkdir(p, { recursive: true }); } catch {}
+  try { await fs.mkdir(p, { recursive: true }); }
+  catch {}
 }
 
 export class ConversionService {
@@ -50,7 +50,9 @@ export class ConversionService {
       let done = false;
       child.on('error', () => { if (!done) { done = true; this.calibreDetected = false; resolve(false); } });
       child.on('exit', (code) => { if (!done) { done = true; this.calibreDetected = code === 0; resolve(this.calibreDetected); } });
-      setTimeout(() => { if (!done) { try { child.kill('SIGKILL'); } catch {} this.calibreDetected = false; resolve(false); } }, 5000);
+      setTimeout(() => { if (!done) { try { child.kill('SIGKILL'); }
+        catch {}
+        this.calibreDetected = false; resolve(false); } }, 5000);
     });
     const ok = await this.detecting; this.detecting = null; return ok;
   }
@@ -80,7 +82,14 @@ export class ConversionService {
 
     const cacheFile = conversionCachePath(bookId, target);
     // Serve from cache if present & >1KB
-    try { const st = await fs.stat(cacheFile); if (st.size > 1024) { logger.debug('Conversion cache hit', { bookId, target }); return fs.readFile(cacheFile); } } catch {}
+    try {
+      const st = await fs.stat(cacheFile);
+      if (st.size > 1024) {
+        logger.debug('Conversion cache hit', { bookId, target });
+        return fs.readFile(cacheFile);
+      }
+    }
+    catch {}
 
     const key = `${bookId}:${target}`;
     if (this.inProgress.has(key)) return this.inProgress.get(key)!;
@@ -113,7 +122,8 @@ export class ConversionService {
     }
 
     const workDir = '/tmp/conversions';
-    try { await fs.mkdir(workDir, { recursive: true }); } catch {}
+    try { await fs.mkdir(workDir, { recursive: true }); }
+    catch {}
     const inputPath = path.join(workDir, `${bookId}-src.${sourceExt || 'bin'}`);
     const outputPath = path.join(workDir, `${bookId}-out.${target}`);
     await fs.writeFile(inputPath, raw);
@@ -126,7 +136,9 @@ export class ConversionService {
       let stderr = '';
       child.stderr.on('data', d => { stderr += d.toString(); });
       const timeoutMs = Number(process.env.CALIBRE_CONVERSION_TIMEOUT_MS || 120000); // 2 min default
-      const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch {}; reject(new Error(`Calibre conversion timeout after ${timeoutMs}ms`)); }, timeoutMs);
+      const timer = setTimeout(() => { try { child.kill('SIGKILL'); }
+        catch {}
+        reject(new Error(`Calibre conversion timeout after ${timeoutMs}ms`)); }, timeoutMs);
       child.on('error', err => { clearTimeout(timer); reject(err); });
       child.on('exit', code => {
         clearTimeout(timer);
@@ -148,34 +160,39 @@ export class ConversionService {
     const urlStr = `${base}/convert?from=${encodeURIComponent(sourceExt || 'bin')}&to=${encodeURIComponent(target)}`;
     logger.info('Calling Calibre service', { bookId, url: urlStr });
     const isHttps = urlStr.startsWith('https://');
-    const lib = isHttps ? https : http;
     const timeoutMs = Number(process.env.CALIBRE_CONVERSION_TIMEOUT_MS || 180000);
-    const { URL } = await import('url');
     const u = new URL(urlStr);
-    const options: any = {
-      method: 'POST',
-      hostname: u.hostname,
-      port: u.port || (isHttps ? 443 : 80),
-      path: u.pathname + u.search,
-      headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': Buffer.byteLength(raw) },
+    const headers: Record<string, string | number> = {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': Buffer.byteLength(raw)
     };
     if (u.username || u.password) {
       const auth = Buffer.from(`${u.username}:${u.password}`).toString('base64');
-      options.headers['Authorization'] = `Basic ${auth}`;
+      headers['Authorization'] = `Basic ${auth}`;
     }
+    const options: HttpRequestOptions | HttpsRequestOptions = {
+      method: 'POST',
+      hostname: u.hostname,
+      port: u.port ? Number(u.port) : (isHttps ? 443 : 80),
+      path: `${u.pathname}${u.search}`,
+      headers
+    };
+    const reqFn = isHttps ? httpsRequest : httpRequest;
     return await new Promise<Buffer>((resolve, reject) => {
-      const req = lib.request(options, (res: any) => {
+      const req = reqFn(options, (res: IncomingMessage) => {
         const chunks: Buffer[] = [];
         res.on('data', (c: Buffer) => chunks.push(c));
         res.on('end', () => {
           const buf = Buffer.concat(chunks);
-          if (res.statusCode >= 200 && res.statusCode < 300) return resolve(buf);
+          const status = res.statusCode || 0;
+          if (status >= 200 && status < 300) return resolve(buf);
           const msg = buf.toString('utf8');
-          return reject(new Error(`Calibre service error ${res.statusCode}: ${msg.slice(0, 500)}`));
+          return reject(new Error(`Calibre service error ${status}: ${msg.slice(0, 500)}`));
         });
       });
       req.on('error', reject);
-      req.setTimeout(timeoutMs, () => { try { req.destroy(new Error('Calibre service timeout')); } catch {} });
+      req.setTimeout(timeoutMs, () => { try { req.destroy(new Error('Calibre service timeout')); }
+        catch {} });
       req.write(raw);
       req.end();
     });
@@ -191,34 +208,69 @@ export class ConversionService {
         logger.debug('Conversion cache hit', { bookId, target: 'epub' });
         return fs.readFile(cacheFile);
       }
-    } catch {}
+  }
+  catch {}
 
     const fb2Text = fb2Buffer.toString('utf8');
     let meta: Fb2Meta = { authors: [] };
+
+    // Helpers to safely navigate xml2js output without using any/unknown pervasively
+    type XmlObject = Record<string, unknown>;
+    const asObj = (v: unknown): XmlObject => (v && typeof v === 'object' ? v as XmlObject : {});
+    const asArr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+    const asStr = (v: unknown): string => {
+      if (typeof v === 'string') return v;
+      if (v && typeof v === 'object' && '_' in (v as Record<string, unknown>)) {
+        const u = (v as Record<string, unknown>)['_'];
+        if (typeof u === 'string') return u;
+      }
+      return String(v ?? '');
+    };
+
     try {
-      const parsed: any = await parseStringPromise(fb2Text, { explicitArray: true, mergeAttrs: true });
-      const root = parsed.FictionBook || parsed.fictionbook || {};
-      const desc = root.description?.[0] || {};
-      const titleInfo = desc['title-info']?.[0] || {};
+      const parsed = await parseStringPromise(fb2Text, { explicitArray: true, mergeAttrs: true }) as XmlObject;
+      const root = asObj(parsed['FictionBook'] ?? parsed['fictionbook']);
+      const desc = asObj(asArr(root['description'])[0]);
+      const titleInfo = asObj(asArr(desc['title-info'])[0]);
+
       const authorsArr: string[] = [];
-      (titleInfo.author || []).forEach((a: any) => {
-        const first = (a['first-name']?.[0] || '').trim();
-        const last = (a['last-name']?.[0] || '').trim();
-        const nick = (a.nickname?.[0] || '').trim();
-        const full = [last, first || nick].filter(Boolean).join(' ').trim();
+      for (const a of asArr(titleInfo['author'])) {
+        const ao = asObj(a);
+        const first = asStr(asArr(ao['first-name'])[0]).trim();
+        const last = asStr(asArr(ao['last-name'])[0]).trim();
+        const nick = asStr(asArr(ao['nickname'])[0]).trim();
+        const full = [last, (first || nick)].filter(Boolean).join(' ').trim();
         if (full) authorsArr.push(full);
-      });
-      const sequences = (titleInfo.sequence || []).map((s: any) => ({ name: s.name?.[0] || s.name, number: s.number?.[0] || s.number }));
-      meta = {
-        title: (titleInfo['book-title']?.[0] || 'Untitled').toString(),
-        authors: authorsArr,
-        lang: (titleInfo.lang?.[0] || '').toString(),
-        date: (titleInfo.date?.[0]?._ || titleInfo.date?.[0])?.toString(),
-        annotation: (titleInfo.annotation?.[0]?.p || []).map((p: any) => (typeof p === 'string' ? p : p._ || '')).join('\n'),
-        sequences
-      };
-    } catch (e) {
-      logger.warn('FB2 parse failed, proceeding with fallback XHTML', { bookId, error: (e as Error).message });
+      }
+
+      const sequences: { name: string; number?: string }[] = [];
+      for (const s of asArr(titleInfo['sequence'])) {
+        const so = asObj(s);
+        const name = asStr(so['name']).trim();
+        if (!name) continue;
+        const numberVal = asStr(so['number']).trim();
+        if (numberVal) sequences.push({ name, number: numberVal });
+        else sequences.push({ name });
+      }
+
+      // Build meta without assigning explicit undefined to optional props (exactOptionalPropertyTypes)
+      const built: Fb2Meta = { authors: authorsArr };
+      const titleVal = asStr(asArr(titleInfo['book-title'])[0]).trim();
+      if (titleVal) built.title = titleVal;
+      const langVal = asStr(asArr(titleInfo['lang'])[0]).trim();
+      if (langVal) built.lang = langVal;
+      const dateVal = asStr(asArr(titleInfo['date'])[0]).trim();
+      if (dateVal) built.date = dateVal;
+      const annotationVal = (() => {
+        const annObj = asObj(asArr(titleInfo['annotation'])[0]);
+        const parts = asArr(annObj['p']).map((p) => asStr(p));
+        return parts.join('\n').trim();
+      })();
+      if (annotationVal) built.annotation = annotationVal;
+      if (sequences.length) built.sequences = sequences;
+      meta = built;
+    } catch (_e) {
+      logger.warn('FB2 parse failed, proceeding with fallback XHTML', { bookId, error: (_e as Error).message });
     }
 
     // Naive body extraction: keep text within <body> tags; if parse failed use regex.
@@ -250,7 +302,7 @@ export class ConversionService {
           ;
       }).join('\n');
       bodyHtml = transformed || '<p>(No content)</p>';
-    } catch (e) {
+    } catch {
       bodyHtml = '<p>(Failed to extract content)</p>';
     }
 
@@ -265,12 +317,13 @@ export class ConversionService {
 
     // Cover (if present)
     let coverBuffer: Buffer | null = null;
-    try { coverBuffer = extractCoverFromFb2(fb2Buffer); } catch {}
+    try { coverBuffer = extractCoverFromFb2(fb2Buffer); }
+    catch {}
 
     // Build EPUB structure
-    const zip = new AdmZip();
-    // Add mimetype uncompressed per spec
-    (zip as any).addFile('mimetype', Buffer.from('application/epub+zip'), undefined, 0);
+  const zip = new AdmZip();
+  // Add mimetype uncompressed per spec
+  zip.addFile('mimetype', Buffer.from('application/epub+zip'), '', 0);
     zip.addFile('META-INF/container.xml', Buffer.from(`<?xml version="1.0"?>\n<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>`));
     zip.addFile('OEBPS/index.xhtml', Buffer.from(xhtml, 'utf8'));
 

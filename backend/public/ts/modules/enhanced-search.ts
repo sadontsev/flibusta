@@ -135,5 +135,4 @@ class EnhancedSearch {
 }
 
 // Expose globally
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-(window as any).EnhancedSearch = (window as any).EnhancedSearch || EnhancedSearch;
+(window as unknown as Record<string, unknown>).EnhancedSearch = (window as unknown as Record<string, unknown>).EnhancedSearch || EnhancedSearch;

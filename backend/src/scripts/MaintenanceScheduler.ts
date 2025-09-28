@@ -1,7 +1,6 @@
-import cron from 'node-cron';
+import { schedule, ScheduledTask } from 'node-cron';
 import DatabaseManager from './DatabaseManager';
 import logger from '../utils/logger';
-import { MaintenanceTask } from '../types/index';
 
 interface TaskInfo {
     running: boolean;
@@ -15,7 +14,7 @@ interface TaskStatus {
 
 class MaintenanceScheduler {
     private dbManager: DatabaseManager;
-    private jobs: Map<string, cron.ScheduledTask>;
+    private jobs: Map<string, ScheduledTask>;
 
     constructor() {
         this.dbManager = new DatabaseManager();
@@ -104,8 +103,7 @@ class MaintenanceScheduler {
             return;
         }
 
-        const task = cron.schedule(cronExpression, taskFunction, {
-            scheduled: true,
+        const task = schedule(cronExpression, taskFunction, {
             timezone: process.env.TZ || 'UTC'
         });
 
