@@ -5,6 +5,7 @@
     "rootDir": "ts",
     "outDir": "js",
     "lib": ["DOM", "ES2020"],
+    "types": [],
     "removeComments": false,
     "strict": false,
     "skipLibCheck": true,

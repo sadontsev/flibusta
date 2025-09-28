@@ -31,7 +31,8 @@
       "@/middleware/*": ["middleware/*"],
       "@/utils/*": ["utils/*"],
       "@/types/*": ["types/*"]
-    }
+    },
+    "types": ["node"]
   },
   "include": [
     "src/**/*"
