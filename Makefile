@@ -55,9 +55,9 @@ check-docker:
 
 # Build containers (exclude calibre by default to avoid unnecessary rebuilds)
 build: check-docker
-	@echo "$(BLUE)[INFO] Building core containers (backend, postgres)...$(NC)"
-	@$(COMPOSE) build --no-cache backend postgres
-	@echo "$(GREEN)[SUCCESS] Core containers built successfully$(NC)"
+	@echo "$(BLUE)[INFO] Building backend container...$(NC)"
+	@$(COMPOSE) build --no-cache backend
+	@echo "$(GREEN)[SUCCESS] Backend built successfully$(NC)"
 
 # Build calibre only (on demand)
 build-calibre: check-docker
@@ -202,8 +202,8 @@ deploy: check-docker
 	@$(COMPOSE) down
 	@echo "$(BLUE)[INFO] Cleaning up Docker build cache (images preserved)...$(NC)"
 	@docker builder prune -f
-	@echo "$(BLUE)[INFO] Rebuilding core containers (backend, postgres)...$(NC)"
-	@$(COMPOSE) build --no-cache backend postgres
+	@echo "$(BLUE)[INFO] Rebuilding backend container...$(NC)"
+	@$(COMPOSE) build --no-cache backend
 	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
 	@$(COMPOSE) up -d
 	@$(MAKE) wait-for-services
