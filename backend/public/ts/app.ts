@@ -217,9 +217,9 @@ class FlibustaAppNG {
     }
   }
 
-  async downloadBook(bookId: string) {
+  async downloadBook(bookId: string, format: string | null = null) {
     try {
-      await this.api.downloadBook(bookId);
+      await this.api.downloadBook(bookId, format);
       this.ui.showToast('Успех', 'Книга загружается...', 'success');
     } catch (error: any) {
       const msg = this.api.handleAPIError(error, 'downloadBook');

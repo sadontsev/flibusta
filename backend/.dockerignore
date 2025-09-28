@@ -1,0 +1,33 @@
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build artifacts
+/dist
+/public/js
+/public/**/*.map
+
+# Local caches and logs
+cache/
+logs/
+.tmp/
+.temp/
+
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# OS files
+.DS_Store
+
+# Large/local data not needed in build context
+../db/
+../cache/
+../blob/
+../FlibustaSQL/
+
+# Docker
+Dockerfile*
+.dockerignore

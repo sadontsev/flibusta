@@ -24,10 +24,31 @@ import AutomatedUpdateService from './services/AutomatedUpdateService';
 import MaintenanceScheduler from './scripts/MaintenanceScheduler';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+// Use port 3000 by default to align with Docker EXPOSE
+const PORT = process.env.PORT || 3000;
 
-// Create the PostgreSQL session store
-const PostgreSQLStore = pgSession(session);
+// Flag for skipping DB-dependent features
+const SKIP_DB = process.env.SKIP_DB_INIT === '1';
+
+// Create the PostgreSQL session store (unless skipping DB)
+let sessionStore: session.Store | undefined;
+if (!SKIP_DB) {
+    const PostgreSQLStore = pgSession(session);
+    sessionStore = new PostgreSQLStore({
+        conObject: {
+            host: process.env.DB_HOST || 'postgres',
+            port: parseInt(process.env.DB_PORT || '5432'),
+            database: process.env.DB_NAME || 'flibusta',
+            user: process.env.DB_USER || 'flibusta',
+            password: process.env.DB_PASSWORD || 'flibusta'
+        },
+        tableName: 'sessions'
+    });
+} else {
+    sessionStore = new session.MemoryStore();
+    logger.warn('Using in-memory session store (SKIP_DB_INIT=1)');
+}
+
 
 // Basic middleware
 app.use(cors({
@@ -40,23 +61,14 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Session configuration
 app.use(session({
-    store: new PostgreSQLStore({
-        conObject: {
-            host: process.env.DB_HOST || 'postgres',
-            port: parseInt(process.env.DB_PORT || '5432'),
-            database: process.env.DB_NAME || 'flibusta',
-            user: process.env.DB_USER || 'flibusta',
-            password: process.env.DB_PASSWORD || 'flibusta'
-        },
-        tableName: 'sessions'
-    }),
+    store: sessionStore,
     secret: process.env.SESSION_SECRET || 'fallback-secret',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: false, // Set to false for development
+        secure: false,
         httpOnly: true,
-        maxAge: parseInt(process.env.SESSION_MAX_AGE || '86400000'), // 24 hours
+        maxAge: parseInt(process.env.SESSION_MAX_AGE || '86400000'),
         sameSite: 'lax'
     }
 }));
@@ -176,20 +188,27 @@ app.listen(PORT, async () => {
     logger.info(`Server is running on port ${PORT}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`Health check: http://localhost:${PORT}/health`);
+    if (SKIP_DB) {
+        logger.warn('Running with SKIP_DB_INIT=1: database calls should be avoided. Health endpoint available.');
+    }
     
     try {
-        // Initialize superadmin user first
-        await initSuperadmin();
-        logger.info('Superadmin user initialized successfully');
-        
-        // Then initialize automated update service
-        await automatedUpdateService.initialize();
-        logger.info('Automated update service started successfully');
-        
-        // Start maintenance scheduler if enabled
-        if (maintenanceScheduler) {
-            maintenanceScheduler.start();
-            logger.info('Maintenance scheduler started successfully');
+        if (SKIP_DB) {
+            logger.warn('SKIP_DB_INIT=1 set: skipping database-dependent initializations (superadmin, updates, scheduler)');
+        } else {
+            // Initialize superadmin user first
+            await initSuperadmin();
+            logger.info('Superadmin user initialized successfully');
+
+            // Then initialize automated update service
+            await automatedUpdateService.initialize();
+            logger.info('Automated update service started successfully');
+
+            // Start maintenance scheduler if enabled
+            if (maintenanceScheduler) {
+                maintenanceScheduler.start();
+                logger.info('Maintenance scheduler started successfully');
+            }
         }
     } catch (error) {
         logger.error('Failed to initialize services:', error);

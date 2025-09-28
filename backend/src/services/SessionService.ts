@@ -16,6 +16,7 @@ class SessionService {
    */
   async initializeSession(req: ExtendedRequest): Promise<SessionUser> {
     try {
+      const SKIP_DB = process.env.SKIP_DB_INIT === '1';
       // If user is already authenticated, return their info
       if (req.session.user_uuid) {
         const user = await this.getSessionUser(req);
@@ -24,10 +25,17 @@ class SessionService {
 
       // Create anonymous session if none exists
       if (!req.session.anonymous_uuid) {
-        const anonymousUser = await this.createAnonymousUser();
-        req.session.anonymous_uuid = anonymousUser.user_uuid;
-        req.session.anonymous_name = anonymousUser.name;
-        return anonymousUser;
+        if (SKIP_DB) {
+          const guestUuid = 'guest-' + Date.now();
+            req.session.anonymous_uuid = guestUuid;
+            req.session.anonymous_name = 'Guest';
+            return { user_uuid: guestUuid, name: 'Guest', type: 'anonymous' } as AnonymousUser;
+        } else {
+          const anonymousUser = await this.createAnonymousUser();
+          req.session.anonymous_uuid = anonymousUser.user_uuid;
+          req.session.anonymous_name = anonymousUser.name;
+          return anonymousUser;
+        }
       }
 
       // Return existing anonymous user

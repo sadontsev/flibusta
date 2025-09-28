@@ -40,7 +40,7 @@ interface Series {
 
 interface Review {
   id: number;
-  rating: number;
+  rating?: number;
   review_text?: string;
   user_id: string;
   created_at: Date;
@@ -249,26 +249,30 @@ class BookService {
       }
 
       // Sorting logic
-      let orderBy = 'b.bookid DESC';
+      // Use aliases available in the outer SELECT:
+      // - Columns from "base" CTE are referenced as base.* in ORDER BY
+      // - LATERAL-selected aliases like primary_author_* are available directly
+      let orderBy = 'base.bookid DESC';
       let relevanceBase: number | null = null;
       if (sort === 'relevance' && query) {
         // Relevance with FTS rank + simple fallback scoring
         relevanceBase = p;
         // Using ts_rank for ordering (lower rank first if we invert? We'll use DESC to show highest relevance first)
-        orderBy = 'ts_rank(b.search_vector, plainto_tsquery(\'simple\', $' + relevanceBase + ")) DESC, b.bookid DESC";
+        // relevance_score is selected into the base CTE via relevanceSelect below
+        orderBy = 'base.relevance_score DESC, base.bookid DESC';
         params.push(query); p++;
       } else {
         switch (sort) {
-          case 'title': orderBy = 'b.title ASC'; break;
-          case 'title_desc': orderBy = 'b.title DESC'; break;
+          case 'title': orderBy = 'base.title ASC'; break;
+          case 'title_desc': orderBy = 'base.title DESC'; break;
           case 'author': orderBy = 'primary_author_lastname ASC NULLS LAST, primary_author_firstname ASC NULLS LAST'; break;
           case 'author_desc': orderBy = 'primary_author_lastname DESC NULLS LAST, primary_author_firstname DESC NULLS LAST'; break;
-          case 'year': orderBy = 'b.year ASC NULLS LAST'; break;
-          case 'year_desc': orderBy = 'b.year DESC NULLS FIRST'; break;
-          case 'rating': orderBy = 'b.rating DESC NULLS LAST'; break;
-          case 'rating_asc': orderBy = 'b.rating ASC NULLS LAST'; break;
+          case 'year': orderBy = 'base.year ASC NULLS LAST'; break;
+          case 'year_desc': orderBy = 'base.year DESC NULLS FIRST'; break;
+          case 'rating': orderBy = 'base.bookid DESC'; break; // fallback: no rating column in schema
+          case 'rating_asc': orderBy = 'base.bookid ASC'; break; // fallback
           case 'date':
-          default: orderBy = 'b.bookid DESC'; break;
+          default: orderBy = 'base.bookid DESC'; break;
         }
       }
 
@@ -282,7 +286,7 @@ class BookService {
       // Single-pass query with lateral joins to avoid N+1
       const sql = `
         WITH base AS (
-          SELECT b.bookid, b.title, b.year, b.lang, b.filetype, b.filesize, b.time, b.rating,
+          SELECT b.bookid, b.title, b.year, b.lang, b.filetype, b.filesize, b.time,
                  COUNT(*) OVER() AS total_count${relevanceSelect}
           FROM libbook b
           WHERE ${conditions.join(' AND ')}

@@ -10,6 +10,7 @@
 - **API**: RESTful API с полной документацией
 - **OPDS**: Поддержка протокола OPDS для электронных читалок
 - **Файлы**: Эффективная обработка и кэширование изображений
+- **Конвертация**: На-лету преобразование FB2 -> EPUB при скачивании
 - **Логирование**: Структурированное логирование с Winston
 - **Docker**: Полная поддержка контейнеризации
 
@@ -124,9 +125,39 @@ docker-compose up -d
 
 ### Файлы
 
-- `GET /api/files/book/:bookId` - Скачать книгу
+- `GET /api/files/book/:bookId` - Скачать книгу (поддерживает `?format=epub` для конвертации FB2 -> EPUB)
 - `GET /api/files/author/:authorId` - Фото автора
 - `GET /api/files/cover/:bookId` - Обложка книги
+
+### Конвертация форматов
+
+Endpoint `/api/files/book/:bookId` теперь поддерживает расширенный список целевых форматов через query-параметр `format`:
+
+```
+?format=epub|mobi|azw3|pdf|txt|rtf|html
+```
+
+Поведение:
+- Если исходный файл уже в целевом формате — возвращается оригинал.
+- Если установлен Calibre (`ebook-convert`) и включён (`ENABLE_CALIBRE=1`), выполняется конвертация с кешированием в `CONVERSIONS_CACHE_PATH`.
+- При отсутствии Calibre работает встроенный fallback только для FB2/XML -> EPUB.
+- Результат сохраняется как `<bookId>.<target>` в каталоге кеша для повторного использования.
+
+Переменные окружения для конвертации:
+- `ENABLE_CALIBRE` (1/0) — включить/выключить использование Calibre (по умолчанию 1).
+- `CALIBRE_EBOOK_CONVERT` — путь к бинарю `ebook-convert` (по умолчанию просто `ebook-convert` в PATH).
+- `CALIBRE_CONVERSION_TIMEOUT_MS` — таймаут одной конвертации (по умолчанию 180000 мс).
+- `CONVERSIONS_CACHE_PATH` — каталог для кэша конвертаций (по умолчанию `/app/cache/converted`).
+
+Пример запроса:
+```
+GET /api/files/book/12345?format=epub
+```
+
+Статусы ошибок:
+- 404 — если файл книги не найден.
+- 400 — если указан неподдерживаемый формат.
+- 500 — внутренняя ошибка конвертера.
 
 ### OPDS (для читалок)
 
@@ -199,6 +230,10 @@ BOOKS_PATH=/app/flibusta
 CACHE_PATH=/app/cache
 AUTHORS_CACHE_PATH=/app/cache/authors
 COVERS_CACHE_PATH=/app/cache/covers
+CONVERSIONS_CACHE_PATH=/app/cache/converted
+ENABLE_CALIBRE=1
+CALIBRE_CONVERSION_TIMEOUT_MS=180000
+SKIP_DB_INIT=0
 
 # Пагинация
 RECORDS_PER_PAGE=10

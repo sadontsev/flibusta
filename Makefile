@@ -1,7 +1,7 @@
 # Flibusta Makefile
 # Comprehensive deployment and management commands
 
-.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test
+.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist
 
 # Colors for output
 RED := \033[0;31m
@@ -9,6 +9,9 @@ GREEN := \033[0;32m
 YELLOW := \033[1;33m
 BLUE := \033[0;34m
 NC := \033[0m # No Color
+
+# Use docker compose if available, fallback to docker-compose
+COMPOSE := $(shell if docker compose version > /dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi)
 
 # Default target
 help:
@@ -47,19 +50,19 @@ check-docker:
 # Build containers
 build: check-docker
 	@echo "$(BLUE)[INFO] Building containers...$(NC)"
-	@docker-compose build --no-cache
+	@$(COMPOSE) build --no-cache
 	@echo "$(GREEN)[SUCCESS] Containers built successfully$(NC)"
 
 # Start containers
 up: check-docker
 	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
-	@docker-compose up -d
+	@$(COMPOSE) up -d
 	@echo "$(GREEN)[SUCCESS] Containers started$(NC)"
 
 # Stop containers
 down: check-docker
 	@echo "$(BLUE)[INFO] Stopping containers...$(NC)"
-	@docker-compose down
+	@$(COMPOSE) down
 	@echo "$(GREEN)[SUCCESS] Containers stopped$(NC)"
 
 # Restart containers
@@ -69,7 +72,7 @@ restart: down up
 # Show logs
 logs:
 	@echo "$(BLUE)[INFO] Recent backend logs:$(NC)"
-	@docker-compose logs --tail=20 backend
+	@$(COMPOSE) logs --tail=20 backend
 
 # Clean Docker cache
 clean: check-docker
@@ -99,7 +102,7 @@ check-backend:
 check-database:
 	@echo "$(BLUE)[INFO] Checking database connection...$(NC)"
 	@for i in 1 2 3 4 5 6 7 8 9 10; do \
-		if docker-compose exec -T postgres pg_isready -U flibusta > /dev/null 2>&1; then \
+		if $(COMPOSE) exec -T postgres pg_isready -U flibusta > /dev/null 2>&1; then \
 			echo "$(GREEN)[SUCCESS] Database is ready$(NC)"; \
 			break; \
 		else \
@@ -111,7 +114,7 @@ check-database:
 # Show container status
 status:
 	@echo "$(BLUE)[INFO] Container status:$(NC)"
-	@docker-compose ps
+	@$(COMPOSE) ps
 	@echo ""
 	@echo "$(BLUE)Application URLs:$(NC)"
 	@echo "  Frontend: http://localhost:27102"
@@ -123,7 +126,7 @@ health-check: check-docker
 	@echo "$(BLUE)🏥 Health Check for Flibusta...$(NC)"
 	@echo ""
 	@echo "$(BLUE)[INFO] Checking container status...$(NC)"
-	@if docker-compose ps | grep -q "Up"; then \
+	@if $(COMPOSE) ps | grep -q "Up"; then \
 		echo "$(GREEN)✅ Containers are running$(NC)"; \
 	else \
 		echo "$(RED)❌ Containers are not running$(NC)"; \
@@ -159,7 +162,7 @@ health-check: check-docker
 	fi
 	@echo ""
 	@echo "$(BLUE)[INFO] Recent backend logs:$(NC)"
-	@docker-compose logs --tail=10 backend
+	@$(COMPOSE) logs --tail=10 backend
 	@echo ""
 	@echo "$(GREEN)Health check completed!$(NC)"
 
@@ -167,30 +170,30 @@ health-check: check-docker
 quick-deploy: check-docker
 	@echo "$(BLUE)⚡ Quick deploying Flibusta changes...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping containers...$(NC)"
-	@docker-compose down
+	@$(COMPOSE) down
 	@echo "$(BLUE)[INFO] Rebuilding backend...$(NC)"
-	@docker-compose build --no-cache backend
+	@$(COMPOSE) build --no-cache backend
 	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
-	@docker-compose up -d
+	@$(COMPOSE) up -d
 	@echo "$(BLUE)[INFO] Waiting for startup...$(NC)"
 	@sleep 15
 	@echo "$(BLUE)[INFO] Status:$(NC)"
-	@docker-compose ps
+	@$(COMPOSE) ps
 	@echo ""
 	@echo "$(GREEN)🌐 Application ready at: http://localhost:27102$(NC)"
-	@echo "$(BLUE)📝 To see logs: docker-compose logs -f backend$(NC)"
+	@echo "$(BLUE)📝 To see logs: $(COMPOSE) logs -f backend$(NC)"
 
 # Full deploy with health checks
 deploy: check-docker
 	@echo "$(BLUE)🚀 Deploying Flibusta changes...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping existing containers...$(NC)"
-	@docker-compose down
+	@$(COMPOSE) down
 	@echo "$(BLUE)[INFO] Cleaning up Docker cache...$(NC)"
 	@docker system prune -f
 	@echo "$(BLUE)[INFO] Rebuilding containers...$(NC)"
-	@docker-compose build --no-cache
+	@$(COMPOSE) build --no-cache
 	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
-	@docker-compose up -d
+	@$(COMPOSE) up -d
 	@$(MAKE) wait-for-services
 	@$(MAKE) check-backend
 	@$(MAKE) check-database
@@ -229,18 +232,18 @@ production-deploy: check-docker
 # Rebuild backend only
 rebuild: check-docker
 	@echo "$(BLUE)[INFO] Rebuilding backend only...$(NC)"
-	@docker-compose build --no-cache backend
+	@$(COMPOSE) build --no-cache backend
 	@echo "$(GREEN)[SUCCESS] Backend rebuilt$(NC)"
 
 # Open shell in backend container
 shell: check-docker
 	@echo "$(BLUE)[INFO] Opening shell in backend container...$(NC)"
-	@docker-compose exec backend /bin/bash
+	@$(COMPOSE) exec backend /bin/bash
 
 # Open PostgreSQL shell
 db-shell: check-docker
 	@echo "$(BLUE)[INFO] Opening PostgreSQL shell...$(NC)"
-	@docker-compose exec postgres psql -U flibusta -d flibusta
+	@$(COMPOSE) exec postgres psql -U flibusta -d flibusta
 
 # Run API tests
 test: check-docker
@@ -268,3 +271,16 @@ open:
 		echo "$(YELLOW)[WARNING] Could not open browser automatically$(NC)"; \
 		echo "$(BLUE)Please open http://localhost:27102 manually$(NC)"; \
 	fi
+
+# DB persistence probe: create a marker table/row, restart DB, verify it's still there
+db-persist: check-docker
+	@echo "$(BLUE)[INFO] Validating DB persistence across restarts...$(NC)"
+	@echo "$(BLUE)[INFO] Creating marker table and row...$(NC)"
+	@$(COMPOSE) exec -T postgres psql -U flibusta -d flibusta -c "CREATE TABLE IF NOT EXISTS persist_check (id serial PRIMARY KEY, label text not null, created_at timestamptz default now()); INSERT INTO persist_check(label) VALUES ('marker') RETURNING id;" >/dev/null
+	@echo "$(BLUE)[INFO] Restarting postgres container...$(NC)"
+	@$(COMPOSE) restart postgres
+	@sleep 5
+	@echo "$(BLUE)[INFO] Checking marker row exists after restart...$(NC)"
+	@$(COMPOSE) exec -T postgres psql -U flibusta -d flibusta -c "SELECT count(*) FROM persist_check WHERE label='marker';" | tail -n +3 | head -n 1 | grep -q "1" && \
+	  echo "$(GREEN)[SUCCESS] DB persistence OK (marker row present)$(NC)" || \
+	  (echo "$(RED)[ERROR] DB persistence check failed (marker row missing)$(NC)"; exit 1)

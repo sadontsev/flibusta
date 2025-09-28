@@ -10,6 +10,14 @@ interface SuperadminResult {
 }
 
 async function initSuperadmin(): Promise<SuperadminResult> {
+    if (process.env.SKIP_DB_INIT === '1') {
+        return {
+            success: true,
+            message: 'Skipped superadmin initialization (SKIP_DB_INIT=1)',
+            user_uuid: 'skipped',
+            username: process.env.SUPERADMIN_USERNAME || 'max'
+        };
+    }
     try {
         const username = process.env.SUPERADMIN_USERNAME || 'max';
         const password = process.env.SUPERADMIN_PASSWORD || 'admin123';

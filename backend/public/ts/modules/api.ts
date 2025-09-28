@@ -98,6 +98,7 @@ class APIModuleNG {
 
   async getRecentBooks() { const response: any = await this.apiCall('/api/books/recent'); return response.data; }
   async getBookDetails(bookId: string) { const response: any = await this.apiCall(`/api/books/${bookId}`); return response.data; }
+  async getBookFormats(bookId: string) { const response: any = await this.apiCall(`/api/files/book/${bookId}/formats`); return response.data; }
   async getAuthorBooks(authorId: string) { const response: any = await this.apiCall(`/api/authors/${authorId}/books`); return response.data; }
   async getGenreBooks(genreId: string) { const response: any = await this.apiCall(`/api/genres/${genreId}/books`); return response.data; }
   async getSeriesBooks(seriesId: string) { const response: any = await this.apiCall(`/api/series/${seriesId}/books`); return response.data; }
@@ -118,7 +119,9 @@ class APIModuleNG {
 
   async downloadBook(bookId: string, format: string | null = null) {
     try {
-      const response = await fetch(`${this.baseURL}/api/files/book/${bookId}`, { credentials: 'include' as RequestCredentials });
+      const url = new URL(`${this.baseURL}/api/files/book/${bookId}`, window.location.origin);
+      if (format) url.searchParams.set('format', format);
+      const response = await fetch(url.toString(), { credentials: 'include' as RequestCredentials });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errorMessage = (errorData as any).error || `Download failed: ${response.status}`;
@@ -140,9 +143,9 @@ class APIModuleNG {
       const ext = Object.entries(ctToExt).find(([k]) => ct.indexOf(k) !== -1)?.[1] || 'bin';
       if (!filename) { filename = `book_${bookId}.${ext}`; } else { if (!/\.[a-z0-9]{2,5}$/i.test(filename)) filename = `${filename}.${ext}`; }
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const objectUrl = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = filename; document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(url); document.body.removeChild(a);
+      a.href = objectUrl; a.download = filename; document.body.appendChild(a); a.click(); window.URL.revokeObjectURL(objectUrl); document.body.removeChild(a);
     } catch (error) { console.error('Download failed:', error); throw error; }
   }
 

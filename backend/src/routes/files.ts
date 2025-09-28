@@ -11,8 +11,9 @@ import logger from '../utils/logger';
 import { 
   createTypeSafeHandler
 } from '../middleware/validation';
-import { buildErrorResponse } from '../types/api';
+import { buildErrorResponse, buildSuccessResponse } from '../types/api';
 import { ExtendedRequest } from '../types';
+import ConversionService from '../services/ConversionService';
 
 const router = express.Router();
 const execFileAsync = promisify(execFile);
@@ -77,7 +78,7 @@ async function findCachedImage(baseDir: string, baseName: string): Promise<strin
 }
 
 // Locate a book entry within the flibusta book zips
-async function getBookZipEntry(bookId: number, requestedType?: string): Promise<{ zipPath: string; entryName: string; entryBuffer: Buffer; }> {
+export async function getBookZipEntry(bookId: number, requestedType?: string): Promise<{ zipPath: string; entryName: string; entryBuffer: Buffer; }> {
   // Determine requested type
   const requested = (requestedType || '').toLowerCase().trim();
   const booksRoot = process.env.BOOKS_PATH || '/application/flibusta';
@@ -110,7 +111,11 @@ async function getBookZipEntry(bookId: number, requestedType?: string): Promise<
       type Candidate = { full: string; ext: string; start: number; end: number };
       const candidates: Candidate[] = [];
       for (const f of files) {
-        const m = /^f\.(\w+)\.(\d+)-(\d+)\.zip$/i.exec(f);
+        // Support patterns:
+        //  - f.<ext>.<start>-<end>.zip
+        //  - f.<ext>-<start>-<end>.zip
+        //  - d.<ext>-<start>-<end>.zip (less preferred but acceptable)
+        const m = /^(?:[fd])\.(\w+)[\.-](\d+)-(\d+)\.zip$/i.exec(f);
         if (!m || m.length < 4 || !m[1] || !m[2] || !m[3]) continue;
         const ext = (m[1] as string).toLowerCase();
         const start = parseInt(m[2] as string, 10);
@@ -172,16 +177,29 @@ async function getBookZipEntry(bookId: number, requestedType?: string): Promise<
   const archiveType = archiveTypeMatch && archiveTypeMatch[1] ? archiveTypeMatch[1].toLowerCase() : '';
   const baseExts = ['fb2', 'epub', 'djvu', 'pdf', 'mobi', 'txt', 'rtf', 'html', 'htm'];
   const preferredExts = Array.from(new Set([archiveType, requested, ...baseExts].filter(Boolean)));
+  // Strict: prefer exact basename match of bookId first
   if (!found) {
     for (const ext of preferredExts) {
       const candidate = `${bookId}.${ext}`;
-      const f = entries.find(e => toLower(e.entryName).endsWith(`/${candidate}`) || toLower(e.entryName).endsWith(candidate));
+      const f = entries.find(e => {
+        const name = toLower(e.entryName).split('/').pop() || '';
+        return name === candidate;
+      });
       if (f) { found = f; break; }
     }
   }
+  // Relaxed: allow subfolder + exact basename
   if (!found) {
     for (const ext of preferredExts) {
-      const f = entries.find(e => toLower(e.entryName).endsWith(`.${ext}`));
+      const candidate = `${bookId}.${ext}`;
+      const f = entries.find(e => toLower(e.entryName).endsWith('/' + candidate));
+      if (f) { found = f; break; }
+    }
+  }
+  // As a last resort, avoid picking arbitrary .*ext; require the id to be present before the extension
+  if (!found) {
+    for (const ext of preferredExts) {
+      const f = entries.find(e => /(^|\/)\d+\.[a-z0-9]+$/i.test(e.entryName) && toLower(e.entryName).includes(`/${bookId}.`));
       if (f) { found = f; break; }
     }
   }
@@ -293,11 +311,14 @@ const validate = (req: ExtendedRequest, res: Response, next: NextFunction): Resp
   next();
 };
 
-// Serve book file
+// Serve book file (optionally converted via ?format=epub)
 router.get('/book/:bookId', [
   param('bookId').isInt({ min: 1 }).withMessage('Book ID must be a positive integer')
 ], validate, createTypeSafeHandler(async (req: ExtendedRequest, res: Response): Promise<Response | void> => {
   const bookId = parseInt(req.params.bookId!);
+  const requestedFormatRaw = (req.query.format as string | undefined)?.toLowerCase();
+  const allowedTargets = ['epub','mobi','azw3','pdf','txt','rtf','html'];
+  const requestedFormat = requestedFormatRaw && allowedTargets.includes(requestedFormatRaw) ? requestedFormatRaw : undefined;
 
     // Get book info
     const book = await getRow(`
@@ -319,112 +340,165 @@ router.get('/book/:bookId', [
     // Determine requested type (normalized)
     const requestedType = (book.filetype || '').toLowerCase().trim();
 
-    // Get file info: prioritize matching requested type, otherwise fall back to fb2/epub/djvu
-    console.log('Querying book_zip table for bookId with type preference:', bookId, requestedType);
-    const fileInfo = await getRow(`
-      SELECT filename, start_id, end_id, usr
-      FROM book_zip
-      WHERE $1 BETWEEN start_id AND end_id
-      ORDER BY
-        (CASE WHEN $2 <> '' AND filename ILIKE ('f.' || $2 || '.%') THEN 1 ELSE 0 END) DESC,
-        (CASE WHEN filename ILIKE 'f.fb2.%' THEN 1 ELSE 0 END) DESC,
-        (CASE WHEN filename ILIKE 'f.epub.%' THEN 1 ELSE 0 END) DESC,
-        (CASE WHEN filename ILIKE 'f.djvu.%' THEN 1 ELSE 0 END) DESC,
-        usr ASC,
-        filename ASC
-      LIMIT 1
-    `, [bookId, requestedType]);
-
-  if (!fileInfo) {
-    return res.status(404).json(buildErrorResponse('Book file not found. This book may not be available for download or the file mapping is missing.'));
-  }
-  console.log('File info:', { filename: fileInfo.filename, start_id: fileInfo.start_id, end_id: fileInfo.end_id });
-
-    const zipPath = path.join(process.env.BOOKS_PATH || '/application/flibusta', fileInfo.filename);
-    console.log('ZIP path:', zipPath);
-    
+    // Try DB mapping first; if not available or fails, fallback to scanning via getBookZipEntry
+    let entryBuffer: Buffer | null = null;
+    let entryName: string | null = null;
+    let actualExt = '';
     try {
-      await fs.access(zipPath);
-      console.log('ZIP file exists');
-    } catch (error) {
-      console.error('ZIP file not found:', (error as Error).message);
-      return res.status(404).json(buildErrorResponse(`Book archive not found: ${fileInfo.filename}`));
+      console.log('Querying book_zip table for bookId with type preference:', bookId, requestedType);
+      const fileInfo = await getRow(`
+        SELECT filename, start_id, end_id, usr
+        FROM book_zip
+        WHERE $1 BETWEEN start_id AND end_id
+        ORDER BY
+          (CASE WHEN $2 <> '' AND filename ILIKE ('f.' || $2 || '.%') THEN 1 ELSE 0 END) DESC,
+          (CASE WHEN filename ILIKE 'f.fb2.%' THEN 1 ELSE 0 END) DESC,
+          (CASE WHEN filename ILIKE 'f.epub.%' THEN 1 ELSE 0 END) DESC,
+          (CASE WHEN filename ILIKE 'f.djvu.%' THEN 1 ELSE 0 END) DESC,
+          usr ASC,
+          filename ASC
+        LIMIT 1
+      `, [bookId, requestedType]);
+
+      if (fileInfo && fileInfo.filename) {
+        console.log('File info:', { filename: fileInfo.filename, start_id: fileInfo.start_id, end_id: fileInfo.end_id });
+        const zipPath = path.join(process.env.BOOKS_PATH || '/application/flibusta', fileInfo.filename);
+        console.log('ZIP path:', zipPath);
+        try {
+          await fs.access(zipPath);
+          console.log('ZIP file exists');
+          // Extract file from ZIP
+          const zip = new AdmZip(zipPath);
+          const zipEntries = zip.getEntries();
+          console.log('ZIP entries count:', zipEntries.length);
+
+          // Find the book file in the ZIP
+          const toLower = (s: string) => (s || '').toLowerCase();
+          const entryNameMatches = (entryNameLower: string, fileNameLower: string) => {
+            return entryNameLower.endsWith(`/${fileNameLower}`) || entryNameLower === fileNameLower || entryNameLower.includes(`/${fileNameLower}`);
+          };
+
+          // Prefer exact filename
+          let found: any = null;
+          if (book.filename) {
+            const bookFileName = toLower(book.filename);
+            found = zipEntries.find(entry => entryNameMatches(toLower(entry.entryName), bookFileName)) || null;
+          }
+          // Fallback by preferred extensions and bookId
+          const archiveTypeMatch = /^f\.(\w+)\./i.exec(fileInfo.filename || '');
+          const archiveType = archiveTypeMatch && archiveTypeMatch[1] ? archiveTypeMatch[1].toLowerCase() : '';
+          const baseExts = ['fb2', 'epub', 'djvu', 'pdf', 'mobi', 'txt', 'rtf', 'html', 'htm'];
+          const preferredExts = Array.from(new Set([archiveType, requestedType, ...baseExts].filter(Boolean)));
+          if (!found) {
+            for (const ext of preferredExts) {
+              const candidate = `${bookId}.${ext}`;
+              const f = zipEntries.find(entry => toLower(entry.entryName).endsWith(`/${candidate}`) || toLower(entry.entryName).endsWith(candidate));
+              if (f) { found = f; break; }
+            }
+          }
+          if (!found) {
+            for (const ext of preferredExts) {
+              const f = zipEntries.find(entry => toLower(entry.entryName).endsWith(`.${ext}`));
+              if (f) { found = f; break; }
+            }
+          }
+          if (found) {
+            entryName = found.entryName;
+            entryBuffer = found.getData();
+            const actualNameLower = toLower(entryName || '');
+            const actualExtMatch = /\.([a-z0-9]+)$/.exec(actualNameLower);
+            actualExt = actualExtMatch ? actualExtMatch[1] : (archiveType || requestedType || 'fb2');
+          }
+        } catch (error) {
+          console.warn('ZIP file not accessible, will fallback to scanning', { error: (error as Error).message });
+        }
+      }
+    } catch (e) {
+      console.warn('DB mapping lookup failed, will fallback to scanning', { bookId, error: (e as Error).message });
     }
 
-    // Extract file from ZIP
-  const zip = new AdmZip(zipPath);
-  const zipEntries = zip.getEntries();
-    console.log('ZIP entries count:', zipEntries.length);
-    
-    // Find the book file in the ZIP
-  let bookEntry: any = null;
-
-    // Normalize helper
-    const toLower = (s: string) => (s || '').toLowerCase();
-    const entryNameMatches = (entryNameLower: string, fileNameLower: string) => {
-      // Allow entries within subfolders; check for exact filename match at end
-      return entryNameLower.endsWith(`/${fileNameLower}`) || entryNameLower === fileNameLower || entryNameLower.includes(`/${fileNameLower}`);
-    };
-
-    // Try exact filename first if available
-    if (book.filename) {
-      const bookFileName = toLower(book.filename);
-      bookEntry = zipEntries.find(entry => entryNameMatches(toLower(entry.entryName), bookFileName)) || null;
-    }
-
-    // Determine archive type from filename (e.g., f.fb2.*, f.epub.*)
-    const archiveTypeMatch = /^f\.(\w+)\./i.exec(fileInfo.filename || '');
-  const archiveType = archiveTypeMatch && archiveTypeMatch[1] ? archiveTypeMatch[1].toLowerCase() : '';
-    const requested = requestedType;
-
-    // Build preferred extensions order
-    const baseExts = ['fb2', 'epub', 'djvu', 'pdf', 'mobi', 'txt', 'rtf', 'html', 'htm'];
-    const preferredExts = Array.from(new Set([archiveType, requested, ...baseExts].filter(Boolean)));
-
-    // Try exact bookId with preferred extensions
-    if (!bookEntry) {
-      for (const ext of preferredExts) {
-        const candidate = `${bookId}.${ext}`;
-        const found = zipEntries.find(entry => toLower(entry.entryName).endsWith(`/${candidate}`) || toLower(entry.entryName).endsWith(candidate));
-        if (found) { bookEntry = found; break; }
+    // If DB path failed to yield an entry, fallback to scanning
+    if (!entryBuffer || !entryName) {
+      try {
+        const fallback = await getBookZipEntry(bookId, requestedType);
+        entryName = fallback.entryName;
+        entryBuffer = fallback.entryBuffer;
+        const lower = (entryName || '').toLowerCase();
+        const m = /\.([a-z0-9]+)$/.exec(lower);
+        actualExt = m ? m[1] : (requestedType || 'fb2');
+        console.log('Fallback scanning located entry', { bookId, entryName });
+      } catch (scanErr) {
+        console.error('Failed to locate book in archives', { bookId, error: (scanErr as Error).message });
+        return res.status(404).json(buildErrorResponse('Book file not found in archive'));
       }
     }
 
-    // As a last resort, try any file with preferred extensions
-    if (!bookEntry) {
-      for (const ext of preferredExts) {
-        const found = zipEntries.find(entry => toLower(entry.entryName).endsWith(`.${ext}`));
-        if (found) { bookEntry = found; break; }
+    // At this point we have entryBuffer/entryName and actualExt
+    const fileName = `${book.author_name} - ${book.title}.${actualExt}`;
+    if (requestedFormat && requestedFormat !== actualExt) {
+      try {
+        const converted = await ConversionService.convert(bookId, actualExt, requestedFormat as any, entryBuffer!);
+        const convName = `${book.author_name} - ${book.title}.${requestedFormat}`;
+        res.setHeader('Content-Type', getContentType(requestedFormat));
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(convName)}"`);
+        res.setHeader('Content-Length', converted.length);
+        res.send(converted);
+        logger.info('Book file served with conversion', { bookId, from: actualExt, to: requestedFormat });
+        return;
+      } catch (convErr) {
+        logger.warn('Conversion failed, falling back to original', { bookId, target: requestedFormat, error: (convErr as Error).message });
       }
     }
 
-    if (!bookEntry) {
-      console.error('Book file not found in archive. Available entries:', zipEntries.map(e => e.entryName).slice(0, 10));
-      return res.status(404).json(buildErrorResponse('Book file not found in archive'));
-    }
-
-  console.log('Found book entry:', bookEntry.entryName);
-
-  // Derive extension from actual entry name for proper content-type
-  const actualNameLower = toLower(bookEntry.entryName);
-  const actualExtMatch = /\.([a-z0-9]+)$/.exec(actualNameLower);
-  const actualExt = actualExtMatch ? actualExtMatch[1] : (requested || archiveType || 'fb2');
-
-  // Set appropriate headers
-  const fileName = `${book.author_name} - ${book.title}.${actualExt}`;
-  res.setHeader('Content-Type', getContentType(actualExt));
+    res.setHeader('Content-Type', getContentType(actualExt));
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
-    res.setHeader('Content-Length', bookEntry.header.size);
-
-    // Send file
-    res.send(bookEntry.getData());
-    
+    res.setHeader('Content-Length', entryBuffer!.length);
+    res.send(entryBuffer);
     logger.info('Book file served successfully', { 
-      bookId, 
-      title: book.title, 
-      fileType: book.filetype, 
-      fileSize: bookEntry.header.size 
+      bookId,
+      title: book.title,
+      fileType: book.filetype,
+      fileSize: entryBuffer!.length,
+      converted: !!requestedFormat && requestedFormat === actualExt
     });
+}));
+
+// ------------------------------------------------------------
+// List available conversion formats for a book
+// Supports DB-less mode (SKIP_DB_INIT=1) by returning a synthetic
+// source format (fb2) so the UI can still display at least EPUB.
+// ------------------------------------------------------------
+router.get('/book/:bookId/formats', [
+  param('bookId').isInt({ min: 1 }).withMessage('Book ID must be a positive integer')
+], validate, createTypeSafeHandler(async (req: ExtendedRequest, res: Response): Promise<Response | void> => {
+  const bookId = parseInt(req.params.bookId!);
+  let source = '';
+  if (process.env.SKIP_DB_INIT === '1') {
+    source = 'fb2';
+  } else {
+    try {
+      const dbRow = await getRow(`
+        SELECT b.bookid, b.filetype
+        FROM libbook b
+        WHERE b.bookid = $1 AND b.deleted = '0'
+        LIMIT 1
+      `, [bookId]);
+      if (!dbRow) {
+        return res.status(404).json(buildErrorResponse('Book not found'));
+      }
+      source = (dbRow.filetype || '').toLowerCase().trim();
+    } catch (e) {
+      logger.warn('Formats lookup failed, falling back to fb2 default', { bookId, error: (e as Error).message });
+      source = 'fb2';
+    }
+  }
+  let targets: string[] = [];
+  try {
+    targets = await (ConversionService as any).listTargetsForSource(source);
+  } catch (e) {
+    logger.warn('List targets failed', { bookId, error: (e as Error).message });
+  }
+  return res.json(buildSuccessResponse({ bookId, source, targets } as any));
 }));
 
 // Serve author image

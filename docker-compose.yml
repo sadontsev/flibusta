@@ -4,7 +4,6 @@ services:
     working_dir: /application
     volumes:
       - './db:/var/lib/postgresql/data'
-      - './backend:/application'
     environment:
       - POSTGRES_USER=flibusta
       - POSTGRES_PASSWORD=flibusta
@@ -23,17 +22,15 @@ services:
       dockerfile: Dockerfile
     working_dir: /app
     volumes:
-      - './backend:/app'
       - './cache:/app/cache'
       # Books archive path; defaults to ./flibusta but can be overridden with BOOKS_HOST_PATH in .env
       - '${BOOKS_HOST_PATH-./flibusta}:/app/flibusta'
       - './FlibustaSQL:/app/sql'
-      - './FlibustaSQL/lib.a.attached.zip:/app/cache/lib.a.attached.zip'
-      - './FlibustaSQL/lib.b.attached.zip:/app/cache/lib.b.attached.zip'
     environment:
       - NODE_ENV=production
       - PORT=3000
       - HOST=0.0.0.0
+      - SKIP_DB_INIT=${SKIP_DB_INIT-0}
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=flibusta
@@ -75,7 +72,6 @@ services:
     image: 'nginx:alpine'
     working_dir: /application
     volumes:
-      - './backend/public:/usr/share/nginx/html'
       - './nginx.conf:/etc/nginx/nginx.conf:ro'
     ports:
       - '27102:80'

@@ -468,7 +468,7 @@ class DisplayModuleNG {
       </div>`;
     this.app.ui.setContent(html);
   }
-  displayBookDetails(book: any) {
+  async displayBookDetails(book: any) {
     if (!book) {
       this.app.ui.showError('Детали книги недоступны');
       return;
@@ -504,6 +504,24 @@ class DisplayModuleNG {
         </div>
       </div>` : '';
 
+    // Build dynamic format buttons using backend-provided targets
+    const originalFormat = (book.filetype || '').toLowerCase();
+    let formatButtons = '';
+    try {
+      const fmtData = await this.app.api.getBookFormats(String(book.bookid));
+      const targets: string[] = (fmtData?.targets || []).filter((t: string) => !!t && t !== originalFormat);
+      const all = [originalFormat, ...targets];
+      formatButtons = all.map((fmt: string) => {
+        const label = fmt.toUpperCase();
+        const primary = fmt === originalFormat;
+        const tooltip = primary ? 'Исходный формат' : `Конвертировать в ${label}`;
+        const icon = primary ? '<i class="fas fa-download mr-2"></i>' : '';
+        return `<button title="${tooltip}" class="${primary ? 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700' : 'bg-gray-800 hover:bg-gray-700 border border-gray-700'} text-white font-medium py-2 px-4 rounded-lg transition-all duration-200" onclick="app.downloadBook('${book.bookid}'${primary ? '' : `, '${fmt}'`})">${icon}${label}</button>`;
+      }).join('');
+    } catch (e) {
+      formatButtons = `<button class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg" onclick="app.downloadBook('${book.bookid}')"><i class=\"fas fa-download mr-2\"></i>Скачать</button>`;
+    }
+
     const html = `
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
         <div>
@@ -522,13 +540,9 @@ class DisplayModuleNG {
             ${filetype ? `<span class="px-2 py-1 bg-blue-900/50 rounded border border-blue-700 text-blue-200">Формат: ${filetype.toUpperCase()}</span>` : ''}
           </div>
           ${formatHintHtml}
-          <div class="mt-6 flex flex-wrap gap-3">
-            <button class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200" onclick="app.downloadBook('${book.bookid}')">
-              <i class="fas fa-download mr-2"></i>Скачать
-            </button>
-            <button class="bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg border border-gray-700 transition-all duration-200" onclick="app.showBooks()">
-              <i class="fas fa-arrow-left mr-2"></i>Назад к списку
-            </button>
+          <div class="mt-6 flex flex-wrap gap-3 items-center">
+            <div class="flex flex-wrap gap-2">${formatButtons}</div>
+            <button class="bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg border border-gray-700 transition-all duration-200" onclick="app.showBooks()"><i class="fas fa-arrow-left mr-2"></i>Назад к списку</button>
           </div>
           ${book.annotation ? `<div class="mt-8 prose prose-invert max-w-none"><h2 class="text-xl font-semibold mb-3">Аннотация</h2><div class="text-gray-200">${book.annotation}</div></div>` : ''}
         </div>
