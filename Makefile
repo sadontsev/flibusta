@@ -1,7 +1,8 @@
 # Flibusta Makefile
 # Comprehensive deployment and management commands
 
-.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre lint lint-fix
+# Update the phony targets list
+.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre lint lint-fix check-bare-metal clean-bare-metal
 
 # Colors for output
 RED := \033[0;31m
@@ -12,6 +13,12 @@ NC := \033[0m # No Color
 
 # Use docker compose if available, fallback to docker-compose
 COMPOSE := $(shell if docker compose version > /dev/null 2>&1; then echo "docker compose"; else echo "docker-compose"; fi)
+
+# Default Docker build settings (override with NO_CACHE=1, etc.)
+export DOCKER_BUILDKIT ?= 1
+NO_CACHE ?= 0
+BUILD_FLAGS := $(if $(filter 1,$(NO_CACHE)),--no-cache,)
+AUTO_CLEAN_BARE ?= 1
 
 # Pick a sensible default NGINX image (multi-arch) but allow override.
 # nginx:1.27-alpine supports linux/amd64 and linux/arm64 out of the box.
@@ -24,16 +31,21 @@ help:
 	@echo "$(GREEN)Deployment:$(NC)"
 	@echo "  make deploy          - Full deployment with health checks (excludes calibre build)"
 	@echo "  make quick-deploy    - Fast deployment for testing"
+	@echo "  make quick-deploy-local - Fast deployment with local pre-build (fastest)"
 	@echo "  make production-deploy - Production deployment (removes demo mode)"
 	@echo ""
 	@echo "$(GREEN)Container Management:$(NC)"
 	@echo "  make build           - Build core containers (backend, postgres)"
+	@echo "  make build-local     - Fast local pre-build + lightweight Docker image"
 	@echo "  make build-calibre   - Build calibre container only"
 	@echo "  make up              - Start containers"
 	@echo "  make down            - Stop containers"
 	@echo "  make restart         - Restart containers"
 	@echo "  make logs            - Show backend logs"
 	@echo "  make clean           - Clean up Docker cache"
+	@echo "  make clean-bare-metal - Remove all bare metal build artifacts"
+	@echo "  NO_CACHE=1 make build - Force a fully clean image rebuild"
+	@echo "  AUTO_CLEAN_BARE=0 make build - Keep local node_modules/dist (slower builds)"
 	@echo ""
 	@echo "$(GREEN)Testing & Health:$(NC)"
 	@echo "  make health-check    - Check application health"
@@ -55,16 +67,43 @@ check-docker:
 	fi
 	@echo "$(GREEN)[SUCCESS] Docker is running$(NC)"
 
+# Check for bare metal builds and clean them
+check-bare-metal:
+	@echo "$(BLUE)[INFO] Checking for bare metal build artifacts...$(NC)"
+	@if [ -f backend/public/js/app.js ] || [ -f backend/public/js/modules/auth.js ]; then \
+		echo "$(YELLOW)[WARNING] Found compiled JS files - removing to ensure Docker-only builds...$(NC)"; \
+		rm -rf backend/public/js/*.js backend/public/js/modules/*.js 2>/dev/null || true; \
+		echo "$(GREEN)[SUCCESS] Bare metal build artifacts removed$(NC)"; \
+	else \
+		echo "$(GREEN)[SUCCESS] No bare metal build artifacts found$(NC)"; \
+	fi
+	@if [ -d backend/node_modules ] || [ -d backend/dist ]; then \
+		if [ "$(AUTO_CLEAN_BARE)" = "1" ]; then \
+			echo "$(YELLOW)[WARNING] Removing local backend/node_modules and backend/dist to speed up Docker builds...$(NC)"; \
+			rm -rf backend/node_modules backend/dist 2>/dev/null || true; \
+			echo "$(GREEN)[SUCCESS] Local directories removed$(NC)"; \
+		else \
+			echo "$(YELLOW)[WARNING] Found local development directories - these will slow down Docker builds$(NC)"; \
+			echo "$(BLUE)[INFO] To clean automatically set AUTO_CLEAN_BARE=1 or run 'make clean-bare-metal'$(NC)"; \
+		fi; \
+	fi
+
 # Build containers (exclude calibre by default to avoid unnecessary rebuilds)
-build: check-docker
+build: check-docker check-bare-metal
 	@echo "$(BLUE)[INFO] Building backend container...$(NC)"
-	@$(COMPOSE) build --no-cache backend
+	@$(COMPOSE) build $(BUILD_FLAGS) backend
 	@echo "$(GREEN)[SUCCESS] Backend built successfully$(NC)"
+
+# Fast local build + lightweight Docker image
+build-local: check-docker
+	@echo "$(BLUE)[INFO] Running fast local pre-build...$(NC)"
+	@./scripts/build_backend_image.sh
+	@echo "$(GREEN)[SUCCESS] Local build completed$(NC)"
 
 # Build calibre only (on demand)
 build-calibre: check-docker
 	@echo "$(BLUE)[INFO] Building calibre container...$(NC)"
-	@$(COMPOSE) build --no-cache calibre
+	@$(COMPOSE) build $(BUILD_FLAGS) calibre
 	@echo "$(GREEN)[SUCCESS] Calibre container built$(NC)"
 
 # Start containers
@@ -93,6 +132,13 @@ clean: check-docker
 	@echo "$(BLUE)[INFO] Cleaning Docker builder cache (images preserved)...$(NC)"
 	@docker builder prune -f
 	@echo "$(GREEN)[SUCCESS] Builder cache cleaned$(NC)"
+
+# Clean all bare metal build artifacts
+clean-bare-metal:
+	@echo "$(BLUE)[INFO] Cleaning all bare metal build artifacts...$(NC)"
+	@rm -rf backend/node_modules backend/dist backend/public/js/*.js backend/public/js/modules/*.js 2>/dev/null || true
+	@echo "$(GREEN)[SUCCESS] All bare metal build artifacts removed$(NC)"
+	@echo "$(BLUE)[INFO] Use 'make deploy' to build everything through Docker$(NC)"
 
 # Wait for services to be ready
 wait-for-services:
@@ -180,13 +226,30 @@ health-check: check-docker
 	@echo ""
 	@echo "$(GREEN)Health check completed!$(NC)"
 
+# Quick deploy with local pre-build
+quick-deploy-local: check-docker
+	@echo "$(BLUE)⚡ Quick deploying with local pre-build...$(NC)"
+	@echo "$(BLUE)[INFO] Stopping containers...$(NC)"
+	@$(COMPOSE) down
+	@echo "$(BLUE)[INFO] Running local pre-build...$(NC)"
+	@./scripts/build_backend_image.sh
+	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
+	@$(COMPOSE) -f docker-compose.yml -f docker-compose.local.yml up -d
+	@echo "$(BLUE)[INFO] Waiting for startup...$(NC)"
+	@sleep 15
+	@echo "$(BLUE)[INFO] Status:$(NC)"
+	@$(COMPOSE) ps
+	@echo ""
+	@echo "$(GREEN)🌐 Application ready at: http://localhost:27102$(NC)"
+	@echo "$(BLUE)📝 To see logs: $(COMPOSE) logs -f backend$(NC)"
+
 # Quick deploy
-quick-deploy: check-docker
+quick-deploy: check-docker check-bare-metal
 	@echo "$(BLUE)⚡ Quick deploying Flibusta changes...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping containers...$(NC)"
 	@$(COMPOSE) down
 	@echo "$(BLUE)[INFO] Rebuilding backend...$(NC)"
-	@$(COMPOSE) build --no-cache backend
+	@$(COMPOSE) build $(BUILD_FLAGS) backend
 	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
 	@$(COMPOSE) up -d
 	@echo "$(BLUE)[INFO] Waiting for startup...$(NC)"
@@ -198,14 +261,14 @@ quick-deploy: check-docker
 	@echo "$(BLUE)📝 To see logs: $(COMPOSE) logs -f backend$(NC)"
 
 # Full deploy with health checks
-deploy: check-docker
+deploy: check-docker check-bare-metal
 	@echo "$(BLUE)🚀 Deploying Flibusta changes...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping existing containers...$(NC)"
 	@$(COMPOSE) down
 	@echo "$(BLUE)[INFO] Cleaning up Docker build cache (images preserved)...$(NC)"
 	@docker builder prune -f
 	@echo "$(BLUE)[INFO] Rebuilding backend container...$(NC)"
-	@$(COMPOSE) build --no-cache backend
+	@$(COMPOSE) build $(BUILD_FLAGS) backend
 	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
 	@$(COMPOSE) up -d
 	@$(MAKE) wait-for-services
@@ -246,13 +309,13 @@ production-deploy: check-docker
 # Rebuild backend only
 rebuild: check-docker
 	@echo "$(BLUE)[INFO] Rebuilding backend only...$(NC)"
-	@$(COMPOSE) build --no-cache backend
+	@$(COMPOSE) build $(BUILD_FLAGS) backend
 	@echo "$(GREEN)[SUCCESS] Backend rebuilt$(NC)"
 
 # Rebuild calibre only
 rebuild-calibre: check-docker
 	@echo "$(BLUE)[INFO] Rebuilding calibre only...$(NC)"
-	@$(COMPOSE) build --no-cache calibre
+	@$(COMPOSE) build $(BUILD_FLAGS) calibre
 	@echo "$(GREEN)[SUCCESS] Calibre rebuilt$(NC)"
 
 # Open shell in backend container

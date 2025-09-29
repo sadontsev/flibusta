@@ -1,0 +1,46 @@
+############################
+# Runtime-only Dockerfile
+# Assumes dist/ and node_modules are already built locally
+############################
+FROM node:22-bookworm-slim AS runtime
+ENV NODE_ENV=production \
+    DEBIAN_FRONTEND=noninteractive
+
+# System deps needed for rendering
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  curl wget xz-utils ca-certificates fontconfig python3 postgresql-client \
+    libx11-6 libnss3 libxrender1 libxext6 libxi6 libglib2.0-0 libgl1 libuuid1 \
+    libegl1 libopengl0 libxcb-cursor0 libxkbcommon0 libxkbcommon-x11-0 \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy package files for runtime info
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Copy pre-built artifacts (built locally)
+COPY ./dist ./dist
+COPY ./public ./public
+
+# Only install production dependencies (no build tools needed)
+RUN npm ci --omit=dev && npm cache clean --force
+
+RUN mkdir -p logs cache/authors cache/covers cache/converted /tmp/conversions
+
+# Ensure unprivileged user exists and has write access to app and temp conversion dir
+RUN useradd -m -u 1001 nodeuser \
+  && chown -R nodeuser:nodeuser /app \
+  && chown -R nodeuser:nodeuser /tmp/conversions
+USER nodeuser
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -fsS http://localhost:3000/health || exit 1
+
+ENV ENABLE_CALIBRE=1 \
+  CALIBRE_CONVERSION_TIMEOUT_MS=180000 \
+    SKIP_DB_INIT=0
+
+CMD ["node", "dist/app.js"]

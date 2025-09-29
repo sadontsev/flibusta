@@ -1,0 +1,54 @@
+services:
+  backend:
+    image: flibusta-backend
+    # Uses pre-built local image instead of building from context
+    working_dir: /app
+    volumes:
+      - './cache:/app/cache'
+      # Books archive path; defaults to ./flibusta but can be overridden with BOOKS_HOST_PATH in .env
+      - '${BOOKS_HOST_PATH-./flibusta}:/app/flibusta'
+      - './FlibustaSQL:/app/sql'
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - SKIP_DB_INIT=${SKIP_DB_INIT-0}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=flibusta
+      - DB_USER=flibusta
+      - DB_PASSWORD=flibusta
+      - DB_SSL=false
+      - SESSION_SECRET=your-super-secret-session-key-change-this
+      - JWT_SECRET=your-super-secret-jwt-key-change-this
+      - JWT_EXPIRES_IN=7d
+      - BOOKS_PATH=/app/flibusta
+      - CACHE_PATH=/app/cache
+      - AUTHORS_CACHE_PATH=/app/cache/authors
+      - COVERS_CACHE_PATH=/app/cache/covers
+      - RECORDS_PER_PAGE=10
+      - BOOKS_PER_PAGE=10
+      - AUTHORS_PER_PAGE=50
+      - SERIES_PER_PAGE=50
+      - OPDS_FEED_COUNT=100
+      - RATE_LIMIT_WINDOW_MS=900000
+      - RATE_LIMIT_MAX_REQUESTS=100
+      - LOG_LEVEL=info
+      - SUPERADMIN_USERNAME=max
+      - SUPERADMIN_PASSWORD=hitthat
+      - SUPERADMIN_EMAIL=me@sadontsev.com
+      - BCRYPT_ROUNDS=12
+      - CALIBRE_URL=http://calibre:7090
+    ports:
+      - '27100:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      calibre:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

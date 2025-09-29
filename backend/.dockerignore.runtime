@@ -1,0 +1,35 @@
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Keep dist and public for runtime image
+# /dist - KEEP FOR RUNTIME
+# /public - KEEP FOR RUNTIME
+
+# Local caches and logs (not needed in runtime)
+cache/
+logs/
+.tmp/
+.temp/
+
+# VCS
+.git
+.gitignore
+.gitattributes
+
+# OS files
+.DS_Store
+
+# Large/local data not needed in build context
+../db/
+../cache/
+../blob/
+../FlibustaSQL/
+
+# Source files not needed in runtime
+src/
+*.ts
+!*.d.ts
+# Keep tsconfig.json for runtime info
+# tsconfig*.json - KEEP MAIN ONE
