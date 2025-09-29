@@ -3,12 +3,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Build artifacts
-/dist
-/public/js
-/public/**/*.map
+# Keep dist and public for runtime image
+# /dist - KEEP FOR RUNTIME
+# /public - KEEP FOR RUNTIME
 
-# Local caches and logs
+# Local caches and logs (not needed in runtime)
 cache/
 logs/
 .tmp/
@@ -28,6 +27,9 @@ logs/
 ../blob/
 ../FlibustaSQL/
 
-# Docker
-Dockerfile*
-.dockerignore
+# Source files not needed in runtime
+src/
+*.ts
+!*.d.ts
+# Keep tsconfig.json for runtime info
+# tsconfig*.json - KEEP MAIN ONE

@@ -119,19 +119,19 @@ class DisplayModuleNG {
       this.app.ui.setContent(`<div class="text-center py-12"><i class="fas fa-user text-gray-500 text-4xl mb-4"></i><h3 class="text-xl font-semibold text-white mb-2">Авторы не найдены</h3><p class="text-gray-400">Попробуйте изменить параметры поиска</p></div>`);
       return;
     }
-    let html = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">`;
+    let html = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3">`;
     data.forEach((author: any) => {
       const authorName = `${author.lastname || ''} ${author.firstname || ''} ${author.nickname || ''}`.trim() || 'Неизвестный автор';
       const count = author.book_count || 0;
-      html += `<div class="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 p-6">
+      html += `<div class="bg-gray-800 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 p-4">
         <div class="text-center">
-          <div class="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <i class="fas fa-user text-white text-2xl"></i>
+          <div class="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-3">
+            <i class="fas fa-user text-white text-lg"></i>
           </div>
-          <h3 class="text-lg font-semibold text-white mb-2 line-clamp-2" title="${authorName}">${authorName}</h3>
-          <p class="text-gray-400 text-sm mb-4">Книг: ${count}</p>
-          <button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg" onclick="app.showAuthorBooks('${author.avtorid}')">
-            <i class="fas fa-books mr-2"></i>Книги автора
+          <h3 class="text-sm font-semibold text-white mb-2 line-clamp-2" title="${authorName}">${authorName}</h3>
+          <p class="text-gray-400 text-xs mb-3">Книг: ${count}</p>
+          <button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-3 text-xs rounded-lg" onclick="app.showAuthorBooks('${author.avtorid}')">
+            <i class="fas fa-books mr-1"></i>Книги автора
           </button>
         </div>
       </div>`;
@@ -146,17 +146,17 @@ class DisplayModuleNG {
     }
     // If items have 'category', treat these as genre categories; clicking shows sub-genres list
     const looksLikeCategories = data.length > 0 && Object.prototype.hasOwnProperty.call(data[0], 'category') && !Object.prototype.hasOwnProperty.call(data[0], 'genrecode');
-    let html = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">`;
+    let html = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3">`;
     data.forEach((genre: any) => {
       const name = genre.category || genre.genredesc || genre.genre || 'Без названия';
       const safeName = String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       const count = genre.book_count || genre.count || 0;
       const primaryAction = looksLikeCategories
-        ? `<button class=\"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg\" onclick=\"app.showGenresInCategory('${safeName}')\">Открыть</button>`
-        : `<button class=\"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg\" onclick=\"app.progressiveLoader.start('books', { genre: '${safeName}' })\">Показать книги</button>`;
-      html += `<div class="bg-gray-800 rounded-lg shadow-lg p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-        <h3 class="text-lg font-semibold text-white mb-2">${name}</h3>
-        <p class="text-gray-400 text-sm mb-4">Книг: ${count}</p>
+        ? `<button class=\"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-3 text-xs rounded-lg\" onclick=\"app.showGenresInCategory('${safeName}')\">Открыть</button>`
+        : `<button class=\"w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-3 text-xs rounded-lg\" onclick=\"app.progressiveLoader.start('books', { genre: '${safeName}' })\">Показать книги</button>`;
+      html += `<div class="bg-gray-800 rounded-lg shadow-lg p-4 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+        <h3 class="text-sm font-semibold text-white mb-2">${name}</h3>
+        <p class="text-gray-400 text-xs mb-3">Книг: ${count}</p>
         ${primaryAction}
       </div>`;
     });
@@ -180,15 +180,15 @@ class DisplayModuleNG {
       this.app.ui.setContent(html);
       return;
     }
-    html += `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">`;
+    html += `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3">`;
     data.forEach((g: any) => {
       const name = g.genredesc || g.genre || 'Без названия';
       const safeName = String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
       const count = g.book_count || g.count || 0;
-      html += `<div class="bg-gray-800 rounded-lg shadow-lg p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-        <h3 class="text-lg font-semibold text-white mb-2">${name}</h3>
-        <p class="text-gray-400 text-sm mb-4">Книг: ${count}</p>
-        <button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg" onclick="app.progressiveLoader.start('books', { genre: '${safeName}' })">Показать книги</button>
+      html += `<div class="bg-gray-800 rounded-lg shadow-lg p-4 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+        <h3 class="text-sm font-semibold text-white mb-2">${name}</h3>
+        <p class="text-gray-400 text-xs mb-3">Книг: ${count}</p>
+        <button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-3 text-xs rounded-lg" onclick="app.progressiveLoader.start('books', { genre: '${safeName}' })">Показать книги</button>
       </div>`;
     });
     html += '</div>';
@@ -199,18 +199,18 @@ class DisplayModuleNG {
       this.app.ui.setContent(`<div class="text-center py-12"><i class="fas fa-layer-group text-gray-500 text-4xl mb-4"></i><h3 class="text-xl font-semibold text-white mb-2">Серии не найдены</h3></div>`);
       return;
     }
-    let html = `<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">`;
+    let html = `<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6 gap-3">`;
     data.forEach((series: any) => {
       const name = series.seqname || series.name || series.seq || 'Без названия';
       const count = series.book_count || series.count || 0;
       const id = series.seqid || series.id || '';
       const safeName = String(name).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      html += `<div class="bg-gray-800 rounded-lg shadow-lg p-6 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-        <h3 class="text-lg font-semibold text-white mb-2">${safeName}</h3>
-        <p class="text-gray-400 text-sm mb-4">Книг: ${count}</p>
-        <div class="flex gap-2">
-          <button class="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-4 rounded-lg" onclick="app.progressiveLoader.start('books', { series: '${safeName}' })">Показать книги</button>
-          ${id ? `<button class="flex-1 bg-gray-800 hover:bg-gray-700 text-white font-medium py-2 px-4 rounded-lg border border-gray-700" onclick="app.showSeriesDetails('${id}')">Подробнее</button>` : ''}
+      html += `<div class="bg-gray-800 rounded-lg shadow-lg p-4 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+        <h3 class="text-sm font-semibold text-white mb-2">${safeName}</h3>
+        <p class="text-gray-400 text-xs mb-3">Книг: ${count}</p>
+        <div class="flex flex-col gap-2">
+          <button class="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-medium py-2 px-3 text-xs rounded-lg" onclick="app.progressiveLoader.start('books', { series: '${safeName}' })">Показать книги</button>
+          ${id ? `<button class="w-full bg-gray-800 hover:bg-gray-700 text-white font-medium py-1 px-3 text-xs rounded-lg border border-gray-700" onclick="app.showSeriesDetails('${id}')">Подробнее</button>` : ''}
         </div>
       </div>`;
     });
