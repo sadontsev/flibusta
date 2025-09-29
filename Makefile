@@ -2,7 +2,7 @@
 # Comprehensive deployment and management commands
 
 # Update the phony targets list
-.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre lint lint-fix check-bare-metal clean-bare-metal
+.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre lint lint-fix check-bare-metal clean-bare-metal compile-frontend
 
 # Colors for output
 RED := \033[0;31m
@@ -54,6 +54,7 @@ help:
 	@echo "  make lint-fix        - Run ESLint with --fix"
 	@echo ""
 	@echo "$(GREEN)Development:$(NC)"
+	@echo "  make compile-frontend - Compile TypeScript frontend to JavaScript"
 	@echo "  make rebuild         - Rebuild backend only"
 	@echo "  make rebuild-calibre - Rebuild calibre only"
 	@echo "  make shell           - Open shell in backend container"
@@ -139,6 +140,16 @@ clean-bare-metal:
 	@rm -rf backend/node_modules backend/dist backend/public/js/*.js backend/public/js/modules/*.js 2>/dev/null || true
 	@echo "$(GREEN)[SUCCESS] All bare metal build artifacts removed$(NC)"
 	@echo "$(BLUE)[INFO] Use 'make deploy' to build everything through Docker$(NC)"
+
+# Compile frontend TypeScript to JavaScript
+compile-frontend:
+	@echo "$(BLUE)[INFO] Compiling frontend TypeScript...$(NC)"
+	@if [ ! -d backend/node_modules ]; then \
+		echo "$(BLUE)[INFO] Installing npm dependencies...$(NC)"; \
+		cd backend && npm install; \
+	fi
+	@cd backend && npm run build:frontend
+	@echo "$(GREEN)[SUCCESS] Frontend TypeScript compiled successfully$(NC)"
 
 # Wait for services to be ready
 wait-for-services:
@@ -227,7 +238,7 @@ health-check: check-docker
 	@echo "$(GREEN)Health check completed!$(NC)"
 
 # Quick deploy with local pre-build
-quick-deploy-local: check-docker
+quick-deploy-local: check-docker compile-frontend
 	@echo "$(BLUE)⚡ Quick deploying with local pre-build...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping containers...$(NC)"
 	@$(COMPOSE) down
@@ -244,7 +255,7 @@ quick-deploy-local: check-docker
 	@echo "$(BLUE)📝 To see logs: $(COMPOSE) logs -f backend$(NC)"
 
 # Quick deploy
-quick-deploy: check-docker check-bare-metal
+quick-deploy: check-docker check-bare-metal compile-frontend
 	@echo "$(BLUE)⚡ Quick deploying Flibusta changes...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping containers...$(NC)"
 	@$(COMPOSE) down
@@ -261,7 +272,7 @@ quick-deploy: check-docker check-bare-metal
 	@echo "$(BLUE)📝 To see logs: $(COMPOSE) logs -f backend$(NC)"
 
 # Full deploy with health checks
-deploy: check-docker check-bare-metal
+deploy: check-docker check-bare-metal compile-frontend
 	@echo "$(BLUE)🚀 Deploying Flibusta changes...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping existing containers...$(NC)"
 	@$(COMPOSE) down
@@ -280,7 +291,7 @@ deploy: check-docker check-bare-metal
 	@echo "$(BLUE)You can now test the application at http://localhost:27102$(NC)"
 
 # Production deploy (removes demo mode)
-production-deploy: check-docker
+production-deploy: check-docker compile-frontend
 	@echo "$(BLUE)🚀 Deploying Flibusta to Production (Demo Mode Removed)...$(NC)"
 	@echo "$(BLUE)[INFO] Verifying demo mode removal...$(NC)"
 	@if grep -q "demo: true" backend/src/routes/files.js; then \
