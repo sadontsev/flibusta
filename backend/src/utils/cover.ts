@@ -1,7 +1,11 @@
 import path from 'path';
 import fs from 'fs/promises';
 import AdmZip from 'adm-zip';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getRow } from '../database/connection';
+
+const execFileAsync = promisify(execFile);
 
 // Locate a book entry within the flibusta book zips
 export async function getBookZipEntry(bookId: number, requestedType?: string): Promise<{ zipPath: string; entryName: string; entryBuffer: Buffer; }> {
@@ -66,8 +70,36 @@ export async function getBookZipEntry(bookId: number, requestedType?: string): P
   if (!zipPath) zipPath = await scanDirForZip();
   if (!zipPath) throw new Error('Book archive not available on disk');
 
-  const zip = new AdmZip(zipPath);
-  const entries = zip.getEntries();
+  // Try to handle large ZIP files with system unzip first, fallback to AdmZip
+  let zip: AdmZip | null = null;
+  let entries: AdmZip.IZipEntry[] = [];
+  let useSystemUnzip = false;
+  
+  try {
+    zip = new AdmZip(zipPath);
+    entries = zip.getEntries();
+  } catch (error: any) {
+    if (error.message?.includes('File size') && error.message?.includes('2 GiB')) {
+      console.log(`Large ZIP detected (${zipPath}), will use system unzip for extraction`);
+      useSystemUnzip = true;
+      // Get ZIP entries list using system unzip -l
+      try {
+        const { stdout } = await execFileAsync('unzip', ['-l', zipPath]);
+        // Parse unzip -l output to get entry names
+        entries = stdout.split('\n')
+          .filter(line => line.match(/^\s*\d+\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+/))
+          .map(line => {
+            const parts = line.trim().split(/\s+/);
+            const entryName = parts.slice(3).join(' ');
+            return { entryName, getData: () => { throw new Error('Use system unzip'); } } as unknown as AdmZip.IZipEntry;
+          });
+      } catch (unzipError) {
+        throw new Error(`Cannot list ZIP contents: ${(unzipError as Error).message}`);
+      }
+    } else {
+      throw error;
+    }
+  }
   const toLower = (s: string) => (s || '').toLowerCase();
 
   let bookFilename: string | null = null;
@@ -112,7 +144,23 @@ export async function getBookZipEntry(bookId: number, requestedType?: string): P
   }
   if (!found) throw new Error('Book file not found in archive');
 
-  return { zipPath, entryName: found.entryName, entryBuffer: found.getData() };
+  // Extract the found entry using appropriate method
+  let entryBuffer: Buffer;
+  if (useSystemUnzip) {
+    try {
+      const { stdout } = await execFileAsync('unzip', ['-p', zipPath, found.entryName], { 
+        encoding: 'buffer', 
+        maxBuffer: 1024 * 1024 * 100 // 100MB limit for book files
+      });
+      entryBuffer = stdout as Buffer;
+    } catch (unzipError) {
+      throw new Error(`Cannot extract ${found.entryName}: ${(unzipError as Error).message}`);
+    }
+  } else {
+    entryBuffer = found.getData();
+  }
+
+  return { zipPath, entryName: found.entryName, entryBuffer };
 }
 
 // Extract cover from FB2 XML buffer using heuristics

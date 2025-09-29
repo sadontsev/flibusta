@@ -23,9 +23,9 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     DEBIAN_FRONTEND=noninteractive
 
-# System deps needed for rendering
+# System deps needed for rendering and ZIP handling
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  curl wget xz-utils ca-certificates fontconfig python3 postgresql-client \
+  curl wget xz-utils ca-certificates fontconfig python3 postgresql-client unzip \
     libx11-6 libnss3 libxrender1 libxext6 libxi6 libglib2.0-0 libgl1 libuuid1 \
     libegl1 libopengl0 libxcb-cursor0 libxkbcommon0 libxkbcommon-x11-0 \
   && rm -rf /var/lib/apt/lists/*

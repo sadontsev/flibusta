@@ -210,7 +210,11 @@ router.get('/book/:bookId', [
         actualExt = m ? m[1] : (requestedType || 'fb2');
         console.log('Fallback scanning located entry', { bookId, entryName });
       } catch (_scanErr) {
-        console.error('Failed to locate book in archives', { bookId, error: (_scanErr as Error).message });
+        const errorMsg = (_scanErr as Error).message;
+        console.error('Failed to locate book in archives', { bookId, error: errorMsg });
+        if (errorMsg.includes('File size') && errorMsg.includes('2 GiB')) {
+          return res.status(500).json(buildErrorResponse('Book archive too large to process. Please try a different format.'));
+        }
         return res.status(404).json(buildErrorResponse('Book file not found in archive'));
       }
     }
