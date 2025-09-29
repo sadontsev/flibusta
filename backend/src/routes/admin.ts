@@ -220,6 +220,28 @@ router.post('/covers/precache', requireAuth, requireAdmin, async (req, res) => {
     }
 });
 
+// Get covers precache progress
+router.get('/covers/progress', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const progress = CoverCacheService.getProgress();
+        res.json({ success: true, data: progress });
+    } catch (error) {
+        logger.error('Error getting covers progress:', error);
+        res.status(500).json({ success: false, error: (error as Error).message });
+    }
+});
+
+// Stop covers precaching
+router.post('/covers/stop', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        CoverCacheService.stopPrecaching();
+        res.json({ success: true, message: 'Cover precaching stopped' });
+    } catch (error) {
+        logger.error('Error stopping covers precaching:', error);
+        res.status(500).json({ success: false, error: (error as Error).message });
+    }
+});
+
 // Schedule missing cover for a specific book
 router.post('/covers/schedule/:bookId', requireAuth, requireAdmin, async (req, res) => {
     try {

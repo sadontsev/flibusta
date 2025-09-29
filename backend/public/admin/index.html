@@ -4,8 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Admin • User Management</title>
-  <link rel="stylesheet" href="/css/bootstrap.min.css?v=20250928171607" />
-  <link rel="stylesheet" href="/css/style.css?v=20250928171607" />
+  <link rel="stylesheet" href="/css/bootstrap.min.css" />
   <style>
     body { padding: 20px; }
     .container { max-width: 960px; }
@@ -42,15 +41,8 @@
         const json = await res.json();
         const s = json?.data || {};
         const el = document.getElementById('covers-stats');
-        const p = s.progress || {};
         if (el) {
-          const lines = [
-            `Queue: ${s.queue} • Running: ${s.running} • In-flight: ${s.inFlight} • Concurrency: ${s.concurrency}`,
-            `Processed: ${p.processed ?? 0} • Cached: ${p.cached ?? 0} • Errors: ${p.errors ?? 0}`,
-            p.active ? `Mode: ${p.mode || '-'} • Limit: ${p.limit || 0} • Active: yes` : `Mode: ${p.mode || '-'} • Done: ${p.done ? 'yes' : 'no'}`,
-            p.lastUpdatedAt ? `Updated: ${new Date(p.lastUpdatedAt).toLocaleString()}` : ''
-          ].filter(Boolean);
-          el.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+          el.textContent = `Queue: ${s.queue} • Running: ${s.running} • In-flight: ${s.inFlight} • Concurrency: ${s.concurrency}`;
         }
       } catch {}
     }
@@ -189,7 +181,7 @@
     });
   </script>
   </head>
-  <body class="admin-page">
+  <body>
     <div class="container">
       <div id="error-banner" class="alert alert-danger" style="display: none;"></div>
       <div class="topbar">
@@ -266,7 +258,7 @@
               <button type="submit" class="btn btn-primary">Precache Covers</button>
             </div>
             <div class="col-auto">
-              <div id="covers-stats" class="text-muted small"></div>
+              <span id="covers-stats" class="text-muted"></span>
             </div>
           </form>
         </div>

@@ -144,10 +144,11 @@ app.get('/debug', (req: express.Request, res: express.Response) => {
     res.sendFile(path.join(__dirname, '../public/debug.html'));
 });
 
-// Admin UI (protected) - intercept before general static to avoid bypass via /admin/ or /admin/index.html
+// Admin UI (protected) - redirect to main app with admin view
 // Use a regex route to match /admin and any subpath (Express 5 + path-to-regexp v6 is strict about wildcards)
 app.get(/^\/admin(?:\/.*)?$/, requireAuth as any, requireAdmin as any, (req: express.Request, res: express.Response) => {
-    res.sendFile(path.join(__dirname, '../public/admin/index.html'));
+    // Redirect to main page with admin parameter to ensure consistent behavior
+    res.redirect('/?view=admin');
 });
 
 // Serve static files from public directory (placed after /admin guard)

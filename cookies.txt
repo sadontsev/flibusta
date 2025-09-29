@@ -1,1 +1,0 @@
-Deprecated: do not store cookies in the repository. Use environment variables or secure secrets.

@@ -10,7 +10,6 @@ const VERSION = process.env.ASSET_VERSION || new Date().toISOString().replace(/[
 const filesToStamp = [
   path.join(PUBLIC_DIR, 'index.html'),
   path.join(PUBLIC_DIR, 'login.html'),
-  path.join(PUBLIC_DIR, 'admin/index.html'),
 ];
 
 for (const file of filesToStamp) {

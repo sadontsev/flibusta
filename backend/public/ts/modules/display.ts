@@ -337,12 +337,12 @@ class DisplayModuleNG {
             </div>
             <div>
               <label class="block text-sm text-gray-300 mb-1" for="admin-covers-limit">Лимит</label>
-              <input id="admin-covers-limit" type="number" min="1" max="5000" value="500" class="bg-gray-900 border border-gray-700 rounded px-2 py-2 text-gray-200 w-28"/>
+              <input id="admin-covers-limit" type="number" min="1" max="1000000" value="500" class="bg-gray-900 border border-gray-700 rounded px-2 py-2 text-gray-200 w-28"/>
             </div>
             <div class="flex-1"></div>
             <div>
               <label class="block text-sm text-gray-300 mb-1"> </label>
-              <button class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg" onclick="(async()=>{try{const sel=document.getElementById('admin-covers-mode'); const inp=document.getElementById('admin-covers-limit'); const mode=(sel&&sel['value'])||'missing'; const limit=parseInt((inp&&inp['value'])||'500',10)||500; const res=await app.api.apiCall('/api/admin/covers/precache',{method:'POST', body: JSON.stringify({mode,limit})}); app.ui.showToast('Успех','Предзагрузка обложек запущена','success');}catch(e){app.api.handleAPIError(e,'precacheCovers');}})()">Предзагрузить обложки</button>
+              <button class="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg" onclick="window._adminPrecacheCovers && window._adminPrecacheCovers()">Предзагрузить обложки</button>
             </div>
           </div>
         </div>

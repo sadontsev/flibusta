@@ -45,6 +45,14 @@ jspm_packages/
 # Yarn Integrity file
 .yarn-integrity
 
+# Session data and cookies
+*.txt
+*_cookies.txt
+cookies.txt
+fresh_cookies.txt
+test_cookies.txt
+test_session.txt
+
 # macOS
 .DS_Store
 .AppleDouble

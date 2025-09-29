@@ -189,6 +189,12 @@ class APIModuleNG {
   clearCache() { Object.keys(localStorage).forEach(key => { if (key.startsWith('flibusta_cache_')) localStorage.removeItem(key); }); }
 
   handleAPIError(error: any, context = '') {
+    // Don't show errors for aborted requests (user navigated away)
+    if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
+      console.log(`API call aborted for ${context} (user navigated)`);
+      return 'Request aborted';
+    }
+    
     console.error(`API Error in ${context}:`, error);
     let userMessage = 'Произошла ошибка при загрузке данных';
     if (error.message?.includes('Unexpected token') && error.message?.includes('<!DOCTYPE')) {
@@ -198,6 +204,8 @@ class APIModuleNG {
     else if (error.message?.includes('404')) { userMessage = 'Данные не найдены'; }
     else if (error.message?.includes('500')) { userMessage = 'Ошибка сервера'; }
     else if (error.message?.includes('NetworkError')) { userMessage = 'Ошибка соединения с сервером'; }
+    
+    // Only show toast for non-aborted errors
     this.app.ui.showToast('Ошибка', userMessage, 'error');
     return userMessage;
   }

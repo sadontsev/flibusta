@@ -52,6 +52,19 @@ class CoverCacheService {
     done: false
   };
 
+  getProgress() {
+    return { ...this.progress };
+  }
+
+  stopPrecaching() {
+    if (this.progress.active) {
+      logger.info('Stopping cover precaching operation');
+      this.progress.active = false;
+      this.progress.done = true;
+      this.progress.lastUpdatedAt = new Date().toISOString();
+    }
+  }
+
   async isCached(bookId: number): Promise<string | null> {
     const root = coversRoot();
     const exts = ['jpg','jpeg','png','gif','webp'];
@@ -134,10 +147,17 @@ class CoverCacheService {
     return null;
   }
 
-  async precacheAll(opts?: { limit?: number; mode?: 'recent'|'missing'|'all' }): Promise<{ processed: number; cached: number; errors: number; }>{
-    const limit = Math.max(1, Math.min(5000, opts?.limit || 1000));
+  async precacheAll(opts?: { limit?: number; mode?: 'recent'|'missing'|'all' }): Promise<{ processed: number; cached: number; errors: number; started: boolean }>{
+    // Allow much higher limits for full database processing, but keep reasonable default
+    const limit = Math.max(1, Math.min(1000000, opts?.limit || 1000));
     const mode = opts?.mode || 'missing';
-  let rows: Array<{ bookid: number }> = [];
+
+    // If already running, return current status
+    if (this.progress.active) {
+      return { processed: this.progress.processed, cached: this.progress.cached, errors: this.progress.errors, started: false };
+    }
+
+    let rows: Array<{ bookid: number }> = [];
     if (mode === 'recent') {
       rows = await getRows(`SELECT bookid FROM libbook WHERE deleted='0' ORDER BY bookid DESC LIMIT $1`, [limit]);
     } else if (mode === 'all') {
@@ -146,10 +166,11 @@ class CoverCacheService {
       // Heuristic: try recent ids first and check cache presence quickly
       rows = await getRows(`SELECT bookid FROM libbook WHERE deleted='0' ORDER BY bookid DESC LIMIT $1`, [limit*2]);
     }
+
     // initialize progress
     this.progress.active = true;
     this.progress.mode = mode as any;
-    this.progress.limit = limit;
+    this.progress.limit = Math.min(limit, rows.length);
     this.progress.processed = 0;
     this.progress.cached = 0;
     this.progress.errors = 0;
@@ -157,8 +178,24 @@ class CoverCacheService {
     this.progress.lastUpdatedAt = this.progress.startedAt;
     this.progress.done = false;
 
+    // Start background processing
+    this.runBackgroundProcessing(rows, mode).catch(error => {
+      logger.error('Background cover processing error:', error);
+      this.progress.active = false;
+      this.progress.done = true;
+    });
+
+    // Return immediately with initial status
+    return { processed: 0, cached: 0, errors: 0, started: true };
+  }
+
+  private async runBackgroundProcessing(rows: Array<{ bookid: number }>, mode: string) {
     let processed = 0, cached = 0, errors = 0;
+    
     for (const r of rows) {
+      // Check if we should stop (e.g., if progress was reset)
+      if (!this.progress.active) break;
+      
       const id = Number(r.bookid);
       try {
         const is = await this.isCached(id);
@@ -171,12 +208,19 @@ class CoverCacheService {
         const out = await this.ensureCached(id);
         if (out) cached++;
       } catch { errors++; }
+      
       // update progress snapshot
       this.progress.processed = processed;
       this.progress.cached = cached;
       this.progress.errors = errors;
       this.progress.lastUpdatedAt = new Date().toISOString();
+      
+      // Small delay to prevent overwhelming the system
+      if (processed % 10 === 0) {
+        await new Promise(resolve => setTimeout(resolve, 1));
+      }
     }
+    
     // finalize progress
     this.progress.processed = processed;
     this.progress.cached = cached;
@@ -184,7 +228,8 @@ class CoverCacheService {
     this.progress.done = true;
     this.progress.active = false;
     this.progress.lastUpdatedAt = new Date().toISOString();
-    return { processed, cached, errors };
+    
+    logger.info(`Cover precaching completed: ${processed} processed, ${cached} cached, ${errors} errors`);
   }
 
   getStats() {
