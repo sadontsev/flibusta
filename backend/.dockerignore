@@ -27,9 +27,9 @@ logs/
 ../blob/
 ../FlibustaSQL/
 
-# Source files not needed in runtime
-src/
-*.ts
+# Source files needed for Docker build
+# src/ - KEEP FOR BUILD
+# *.ts - KEEP FOR BUILD
 !*.d.ts
 # Keep tsconfig.json for runtime info
 # tsconfig*.json - KEEP MAIN ONE
