@@ -111,18 +111,46 @@ backend/
 git clone <repository-url>
 cd flibusta
 
+# Configure environment (required)
+cp .env.example .env
+# Edit .env with your actual configuration values
+
 # Start the application
-docker compose up -d
+make deploy  # Full deployment with health checks
+# OR for quick deployment:
+# docker compose up -d
 
 # Access the application
 open http://localhost:27102
 ```
+
+> **⚠️ Security Note**: The `.env` file contains sensitive configuration including passwords and secrets. Never commit this file to version control. Use `.env.example` as a template.
 
 ### **Default Credentials**
 - **Admin**: `admin` / `admin123`
 - **User**: `user` / `user123`
 
 ## 🔧 Configuration
+
+### **Environment Setup**
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` with your actual values:
+   ```bash
+   # Required: Change these from defaults
+   SESSION_SECRET=your-unique-session-secret-here
+   JWT_SECRET=your-unique-jwt-secret-here
+   SUPERADMIN_PASSWORD=your-secure-password
+   
+   # Optional: Custom book path
+   BOOKS_HOST_PATH=/path/to/your/books
+   ```
+
+> **🔒 Security**: Never commit `.env` to git. It's automatically ignored by `.gitignore`.
 
 ### **Environment Variables**
 ```env

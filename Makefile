@@ -2,7 +2,7 @@
 # Comprehensive deployment and management commands
 
 # Update the phony targets list
-.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre lint lint-fix check-bare-metal clean-bare-metal compile-frontend
+.PHONY: help build up down restart logs clean deploy quick-deploy health-check production-deploy test status open rebuild shell db-shell db-persist build-calibre rebuild-calibre lint lint-fix check-bare-metal clean-bare-metal compile-frontend check-environment create-directories verify-deployment
 
 # Colors for output
 RED := \033[0;31m
@@ -29,8 +29,8 @@ help:
 	@echo "$(BLUE)Flibusta Management Commands:$(NC)"
 	@echo ""
 	@echo "$(GREEN)Deployment:$(NC)"
-	@echo "  make deploy          - Full deployment with health checks (excludes calibre build)"
-	@echo "  make quick-deploy    - Fast deployment for testing"
+	@echo "  make deploy          - Full deployment with comprehensive validation & health checks"
+	@echo "  make quick-deploy    - Fast deployment for testing (includes validation)"
 	@echo "  make quick-deploy-local - Fast deployment with local pre-build (fastest)"
 	@echo "  make production-deploy - Production deployment (removes demo mode)"
 	@echo ""
@@ -67,6 +67,36 @@ check-docker:
 		exit 1; \
 	fi
 	@echo "$(GREEN)[SUCCESS] Docker is running$(NC)"
+
+# Check environment prerequisites
+check-environment:
+	@echo "$(BLUE)[INFO] Validating deployment environment...$(NC)"
+	@if [ ! -f .env ]; then \
+		echo "$(YELLOW)[WARNING] .env file not found, creating from .env.example...$(NC)"; \
+		cp .env.example .env 2>/dev/null || echo "$(YELLOW)[WARNING] No .env.example found$(NC)"; \
+		echo "$(BLUE)[INFO] Please edit .env with your actual configuration values$(NC)"; \
+	fi
+	@if [ ! -f nginx.conf ]; then \
+		echo "$(RED)[ERROR] nginx.conf is missing$(NC)"; \
+		exit 1; \
+	fi
+	@if [ ! -d FlibustaSQL ]; then \
+		echo "$(YELLOW)[WARNING] FlibustaSQL directory not found - database will be empty$(NC)"; \
+	fi
+	@if [ ! -d backend/src ]; then \
+		echo "$(RED)[ERROR] Backend source code is missing$(NC)"; \
+		exit 1; \
+	fi
+	@if [ ! -f backend/package.json ]; then \
+		echo "$(RED)[ERROR] Backend package.json is missing$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(GREEN)[SUCCESS] Environment validation completed$(NC)"
+
+# Create required directories
+create-directories:
+	@mkdir -p cache/authors cache/covers cache/converted db FlibustaSQL
+	@echo "$(GREEN)[SUCCESS] Required directories created$(NC)"
 
 # Check for bare metal builds and clean them
 check-bare-metal:
@@ -182,6 +212,33 @@ check-database:
 		fi; \
 	done
 
+# Verify deployment completeness
+verify-deployment:
+	@echo "$(BLUE)[INFO] Verifying deployment completeness...$(NC)"
+	@echo "$(BLUE)[INFO] Testing critical API endpoints...$(NC)"
+	@if curl -f "http://localhost:27102/api/books/search?q=&page=0&limit=1&sort=relevance" > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Books API is working$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️ Books API test failed (this may be normal if no data is loaded)$(NC)"; \
+	fi
+	@if curl -f "http://localhost:27102/api/authors?page=0&limit=1&sort=relevance" > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Authors API is working$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️ Authors API test failed (this may be normal if no data is loaded)$(NC)"; \
+	fi
+	@echo "$(BLUE)[INFO] Testing frontend assets...$(NC)"
+	@if curl -f "http://localhost:27102/js/modules/display.js" > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Frontend JavaScript assets are accessible$(NC)"; \
+	else \
+		echo "$(RED)❌ Frontend JavaScript assets are missing$(NC)"; \
+	fi
+	@if curl -f "http://localhost:27102/css/style.css" > /dev/null 2>&1; then \
+		echo "$(GREEN)✅ Frontend CSS assets are accessible$(NC)"; \
+	else \
+		echo "$(YELLOW)⚠️ Frontend CSS assets may be missing$(NC)"; \
+	fi
+	@echo "$(GREEN)[SUCCESS] Deployment verification completed$(NC)"
+
 # Show container status
 status:
 	@echo "$(BLUE)[INFO] Container status:$(NC)"
@@ -238,7 +295,7 @@ health-check: check-docker
 	@echo "$(GREEN)Health check completed!$(NC)"
 
 # Quick deploy with local pre-build
-quick-deploy-local: check-docker compile-frontend
+quick-deploy-local: check-docker check-environment compile-frontend
 	@echo "$(BLUE)⚡ Quick deploying with local pre-build...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping containers...$(NC)"
 	@$(COMPOSE) down
@@ -255,7 +312,7 @@ quick-deploy-local: check-docker compile-frontend
 	@echo "$(BLUE)📝 To see logs: $(COMPOSE) logs -f backend$(NC)"
 
 # Quick deploy
-quick-deploy: check-docker check-bare-metal compile-frontend
+quick-deploy: check-docker check-environment check-bare-metal compile-frontend
 	@echo "$(BLUE)⚡ Quick deploying Flibusta changes...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping containers...$(NC)"
 	@$(COMPOSE) down
@@ -272,12 +329,14 @@ quick-deploy: check-docker check-bare-metal compile-frontend
 	@echo "$(BLUE)📝 To see logs: $(COMPOSE) logs -f backend$(NC)"
 
 # Full deploy with health checks
-deploy: check-docker check-bare-metal compile-frontend
+deploy: check-docker check-environment check-bare-metal compile-frontend
 	@echo "$(BLUE)🚀 Deploying Flibusta changes...$(NC)"
 	@echo "$(BLUE)[INFO] Stopping existing containers...$(NC)"
 	@$(COMPOSE) down
 	@echo "$(BLUE)[INFO] Cleaning up Docker build cache (images preserved)...$(NC)"
 	@docker builder prune -f
+	@echo "$(BLUE)[INFO] Creating required directories...$(NC)"
+	@$(MAKE) create-directories
 	@echo "$(BLUE)[INFO] Rebuilding backend container...$(NC)"
 	@$(COMPOSE) build $(BUILD_FLAGS) backend
 	@echo "$(BLUE)[INFO] Starting containers...$(NC)"
@@ -285,13 +344,14 @@ deploy: check-docker check-bare-metal compile-frontend
 	@$(MAKE) wait-for-services
 	@$(MAKE) check-backend
 	@$(MAKE) check-database
+	@$(MAKE) verify-deployment
 	@$(MAKE) status
 	@echo ""
 	@echo "$(GREEN)Deployment completed successfully!$(NC)"
 	@echo "$(BLUE)You can now test the application at http://localhost:27102$(NC)"
 
 # Production deploy (removes demo mode)
-production-deploy: check-docker compile-frontend
+production-deploy: check-docker check-environment compile-frontend
 	@echo "$(BLUE)🚀 Deploying Flibusta to Production (Demo Mode Removed)...$(NC)"
 	@echo "$(BLUE)[INFO] Verifying demo mode removal...$(NC)"
 	@if grep -q "demo: true" backend/src/routes/files.js; then \
