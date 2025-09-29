@@ -20,6 +20,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    # Alternative: use pre-built runtime image with 'image: flibusta-backend'
     working_dir: /app
     volumes:
       - './cache:/app/cache'

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    volumes:
+      # Mount compiled code for fast development
+      - './backend/dist:/app/dist'
+      - './backend/public:/app/public'
+      # Keep node_modules in container (performance)
+      - backend_node_modules:/app/node_modules
+      # Data volumes (existing)
+      - './cache:/app/cache'
+      - '${BOOKS_HOST_PATH-./flibusta}:/app/flibusta'
+      - './FlibustaSQL:/app/sql'
+    environment:
+      - NODE_ENV=development
+
+volumes:
+  backend_node_modules:
